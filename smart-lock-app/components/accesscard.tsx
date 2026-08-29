@@ -1,0 +1,60 @@
+import { StyleSheet, Image, Text, View, Pressable } from 'react-native';
+import { globalStyles } from "@/styles/global";
+
+interface functionArgs {
+    permission: string,
+    startingTime: string,
+    endingTime: string,
+    date: string,
+}
+
+export default function AccessCard({permission, startingTime, endingTime, date}: functionArgs) {
+    return (
+        <View style={styles.timecardContainer}>
+            <View>
+                <View style={styles.timecardRow}>
+                    <Image style={styles.timecardImage} source={require('../assets/images/key.png')}/>
+                    <Text style={styles.timecardText}>{permission}</Text>
+                </View>
+                <View style={styles.timecardRow}>
+                    <Image style={styles.timecardImage} source={require('../assets/images/time.png')}/>
+                    <Text style={styles.timecardText}>{startingTime} to {endingTime}</Text>
+                </View>
+                <View style={styles.timecardRow}>
+                    <Image style={styles.timecardImage} source={require('../assets/images/calendar.png')}/>
+                    <Text style={styles.timecardDateText}>{date}</Text>
+                </View>
+            </View>
+            
+        </View>
+    );
+}
+
+const styles = StyleSheet.create({
+    timecardContainer: {
+        backgroundColor: '#16213e',
+        borderRadius: 12,
+        padding: 16,
+    },
+    timecardRow: {
+        display: 'flex',
+        flexDirection: 'row',
+        marginTop: 5,
+        marginBottom: 5,
+    },
+    timecardImage: {
+        width: 24,
+        height: 24,
+        marginLeft: 10,
+        marginRight: 10,
+    },
+    timecardText: {
+        fontSize: 20,
+        color: "#ffffff",
+    },
+    timecardDateText: {
+        fontSize: 20,
+        fontWeight: '800',
+        color: "#ffffff",
+    },
+});
