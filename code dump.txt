@@ -1,0 +1,368 @@
+        {notes && (
+          <p className="text-[11px] text-slate-400 bg-[#090d16] p-2 rounded-lg border border-slate-800/80 italic">
+            "{notes}"
+          </p>
+        )}
+
+
+                <span className="text-slate-400 flex items-center gap-1.5">
+                  {changing ? (
+                    <>
+                      <span
+                        className={`w-2 h-2 rounded-full animate-ping ${
+                          locked ? 'bg-emerald-400' : 'bg-rose-400'
+                        }`}
+                      />
+                      <span className="text-white font-bold">
+                        {locked ? 'OPENING LOCK...' : 'CLOSING LOCK...'}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-slate-400">
+                      Lock Status:{' '}
+                      <strong className={locked ? 'text-red-400' : 'text-emerald-400'}>
+                        {locked ? 'Secured' : 'Open'}
+                      </strong>
+                    </span>
+                  )}
+                </span>
+
+Reservation Requests
+Manage access schedule requests
+
+Request Schedule
+
+All Requests (2)
+            <span
+              className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold border ${
+                isAdmin
+                  ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20'
+                  : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+              }`}
+            >
+              {isAdmin ? 'ROOT ADMIN' : 'USER'}
+            </span>
+
+
+My Requests (1)
+
+
+                <p className="text-[11px] font-mono text-red-300 mt-1">
+                  SmartLock unit unlocked!
+                </p>
+
+
+{/* Dynamic Welcome Message Banner */}
+      <WelcomeBanner />
+
+
+              <div>
+                <span className="text-slate-500 block">Radio Protocol:</span>
+                <span className="text-cyan-400 font-bold">BLE 5.3 + AES-256</span>
+              </div>
+              <div>
+                <span className="text-slate-500 block">Security Key:</span>
+                <span className="text-emerald-400 font-bold">Hardware Keystore Enclave</span>
+              </div>
+
+
+              <span className="text-emerald-400">FIPS 140-3 VERIFIED</span>
+
+
+{/* Anti-Tamper Alarm Threshold */}
+              <div className="bg-[#0f172a] p-3 rounded-xl border border-slate-800/80 space-y-2">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <span className="font-bold text-white block">Anti-Tamper Accelerometer</span>
+                    <span className="text-[10px] text-slate-400">Vibration & forced entry sensor sensitivity</span>
+                  </div>
+                  <span className="text-xs font-mono font-bold text-emerald-400 uppercase">
+                    {tamperAlarmSensitivity}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 pt-1">
+                  {(['high', 'medium', 'off'] as const).map((sens) => (
+                    <button
+                      key={sens}
+                      type="button"
+                      onClick={() => {
+                        setTamperAlarmSensitivity(sens);
+                        showToast(`Tamper alarm sensitivity set to ${sens}`);
+                      }}
+                      className={`py-1.5 rounded-lg text-xs font-mono font-bold uppercase transition-all cursor-pointer ${
+                        tamperAlarmSensitivity === sens
+                          ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                          : 'bg-[#1e293b] text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {sens}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+
+Key: SL-{profile.username.slice(0, 3).toUpperCase()} •
+
+
+{/* Operating Clearance Hours */}
+          <div className="space-y-2">
+            <label className="text-slate-300 font-semibold flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-cyan-400" />
+              Authorized Operating Window
+            </label>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+              {[
+                { id: '24_7', label: '24/7 Access', desc: 'All hours' },
+                { id: 'standard', label: 'Standard', desc: '8 AM - 6 PM' },
+                { id: 'extended', label: 'Extended', desc: '7 AM - 10 PM' },
+                { id: 'morning', label: 'Midday Shift', desc: '10 AM - 1 PM' },
+              ].map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setClearancePreset(p.id as any)}
+                  className={`p-2 rounded-xl border text-center transition-all cursor-pointer ${
+                    clearancePreset === p.id
+                      ? 'bg-cyan-500/15 border-cyan-500/70 text-cyan-300 font-bold'
+                      : 'bg-[#0f172a] border-slate-800 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <p className="text-[11px] leading-tight">{p.label}</p>
+                  <p className="text-[9px] text-slate-500 font-mono mt-0.5">{p.desc}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+
+<button
+                    type="button"
+                    onClick={() => setShowCustomAvatar(!showCustomAvatar)}
+                    className="px-2.5 py-1 rounded-lg bg-[#1e293b] border border-slate-700 text-[10px] font-mono text-cyan-300 hover:text-white cursor-pointer"
+                  >
+                    Custom URL
+                  </button>
+
+
+{/* Toggle 4 */}
+              <div className="flex items-center justify-between bg-[#0f172a] p-3 rounded-xl border border-slate-800/80">
+                <div>
+                  <span className="font-bold text-white block">Audio Click & Haptic Feedback</span>
+                  <span className="text-[10px] text-slate-400">Tactile solenoid feedback on button engagement</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSoundFeedback(!soundFeedback);
+                    showToast(`Haptic feedback ${!soundFeedback ? 'enabled' : 'disabled'}`);
+                  }}
+                  className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
+                    soundFeedback ? 'bg-emerald-500' : 'bg-slate-800'
+                  }`}
+                >
+                  <span
+                    className={`absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform ${
+                      soundFeedback ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+
+
+{/* Toggle 2 */}
+              <div className="flex items-center justify-between bg-[#0f172a] p-3 rounded-xl border border-slate-800/80">
+                <div>
+                  <span className="font-bold text-white block">Emergency Evacuation Siren</span>
+                  <span className="text-[10px] text-slate-400">High-priority siren sound on emergency override</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNotifyEmergencySiren(!notifyEmergencySiren);
+                    showToast(`Emergency siren alert ${!notifyEmergencySiren ? 'enabled' : 'disabled'}`);
+                  }}
+                  className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
+                    notifyEmergencySiren ? 'bg-red-500' : 'bg-slate-800'
+                  }`}
+                >
+                  <span
+                    className={`absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform ${
+                      notifyEmergencySiren ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+
+
+          {/* Role and Access Status */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300">Security Clearance</label>
+              <select
+                value={role}
+                onChange={(e) => setRole(e.target.value as 'admin' | 'user')}
+                className="w-full bg-[#090d16] border border-[#334155] focus:border-[#06b6d4] text-white px-3 py-2 rounded-xl text-xs focus:outline-none cursor-pointer"
+              >
+                <option value="user">Standard User Clearance</option>
+                <option value="admin">Administrator Override</option>
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300">Policy Status</label>
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value as 'active' | 'restricted')}
+                className="w-full bg-[#090d16] border border-[#334155] focus:border-[#06b6d4] text-white px-3 py-2 rounded-xl text-xs focus:outline-none cursor-pointer"
+              >
+                <option value="active">Active & Authorized</option>
+                <option value="restricted">Suspended / Restricted</option>
+              </select>
+            </div>
+          </div>
+
+
+            {isRestricted ? (
+              <span className="text-[9px] px-2 py-0.5 rounded-md font-mono uppercase font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                Restricted
+              </span>
+            ) : (
+              <span className="text-[9px] px-2 py-0.5 rounded-md font-mono uppercase font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                Active
+              </span>
+            )}
+
+
+{days && days.length > 0 && (
+            <div className="flex items-center gap-1 pt-0.5">
+              {days.map((d) => (
+                <span
+                  key={d}
+                  className="text-[9px] px-1.5 py-0.2 rounded bg-slate-800/80 border border-slate-700 text-slate-300 font-mono"
+                >
+                  {d}
+                </span>
+              ))}
+            </div>
+          )}
+
+
+              <span className="text-[10px] font-mono text-cyan-400 font-bold uppercase">
+                {currentUser?.type} ACCOUNT
+              </span>
+
+
+<button
+                id="settings-upload-photo-btn"
+                onClick={() => handleOpenEdit('photo')}
+                className="bg-[#1e293b]/70 hover:bg-[#334155] text-white py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 border border-slate-700/60 transition-colors cursor-pointer"
+              >
+                <Camera className="w-3.5 h-3.5 text-emerald-400" />
+                Upload Photo
+              </button>
+
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-bold">
+              {filteredNotes.length} BOOKED
+            </span>
+
+
+{
+    username: 'Alex Rivera',
+    password: 'password123',
+    type: 'user',
+    avatarUrl: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=150&auto=format&fit=crop&q=80',
+    time: [540, 1020],
+    permission: 'Standard User Access',
+    joinedDate: 'Mar 15, 2026',
+    isOnline: false,
+    lastActive: 'Active 2h ago',
+  },
+
+
+{
+    username: 'Dr. Sarah Connor',
+    password: 'password123',
+    type: 'user',
+    avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
+    time: [540, 1020],
+    permission: 'Standard User Access',
+    joinedDate: 'Mar 01, 2026',
+    isOnline: true,
+    lastActive: 'Active now',
+  },
+
+
+{/* Pick from preset gallery */}
+            <div>
+              <label className="block text-xs font-mono font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                Or Select Security Preset Avatar:
+              </label>
+              <div className="grid grid-cols-6 gap-2">
+                {sampleAvatars.map((url, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setSelectedPhoto(url)}
+                    className={`rounded-full overflow-hidden border-2 transition-transform cursor-pointer aspect-square ${
+                      selectedPhoto === url ? 'border-emerald-400 scale-110 shadow-lg' : 'border-transparent hover:scale-105'
+                    }`}
+                  >
+                    <img src={url} alt={`Preset ${idx + 1}`} className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+
+{/* Quick Actuator Test Button (inside modal) */}
+          <div className="bg-[#090d16] p-3 rounded-2xl border border-slate-800/80 space-y-2 mt-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-mono text-slate-300 font-bold flex items-center gap-1.5">
+                <Cpu className="w-3.5 h-3.5 text-cyan-400" />
+                Selected Lock Test
+              </span>
+              <span
+                className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
+                  locked ? 'bg-red-500/20 text-red-400' : 'bg-emerald-500/20 text-emerald-400'
+                }`}
+              >
+                {locked ? 'State: LOCKED' : 'State: UNLOCKED'}
+              </span>
+            </div>
+
+            <button
+              id="modal-toggle-lock-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleLock();
+              }}
+              disabled={changing}
+              className={`w-full py-2 px-3 rounded-xl font-mono text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                changing
+                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 cursor-wait'
+                  : locked
+                  ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40'
+                  : 'bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/40'
+              }`}
+            >
+              {changing ? (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
+                  <span>Transmitting Pulse...</span>
+                </>
+              ) : locked ? (
+                <>
+                  <Unlock className="w-3.5 h-3.5" />
+                  <span>Test Signal: Trigger Unlock Actuator</span>
+                </>
+              ) : (
+                <>
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>Test Signal: Trigger Secure Lock Actuator</span>
+                </>
+              )}
+            </button>
+          </div>
