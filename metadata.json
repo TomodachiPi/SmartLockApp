@@ -1,6 +1,0 @@
-{
-  "name": "SmartLock App",
-  "description": "Smart door lock controller and access management application for monitoring lock status, access schedules, user approvals, and entry history.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
