@@ -14,6 +14,9 @@ import {
   Unlock,
   Radio,
 } from 'lucide-react';
+import locked_png from './../assets/images/locked.png';
+import unlocked_png from './../assets/images/unlocked.png';
+import user_png from './../assets/images/user.png';
 
 export const LockScreen: React.FC = () => {
   const { currentUser, locked, changing, toggleLock, userSchedules } = useApp();
@@ -85,7 +88,7 @@ export const LockScreen: React.FC = () => {
         <div className="flex items-center gap-3">
           <div className="relative">
             <img
-              src={currentUser?.avatarUrl || '/images/user.png'}
+              src={currentUser?.avatarUrl || user_png}
               alt="User Avatar"
               className="w-11 h-11 rounded-full object-cover border-2 border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.35)]"
             />
@@ -129,9 +132,9 @@ export const LockScreen: React.FC = () => {
             <BatteryCharging className="w-3.5 h-3.5 text-emerald-400" />
             <span>98% BATTERY</span>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5" title="Local WebSocket server: ws://192.168.4.1/ws">
             <Shield className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Local Hotspot WiFi</span>
+            <span>Secured</span>
           </div>
         </div>
       </div>
@@ -188,7 +191,7 @@ export const LockScreen: React.FC = () => {
                 {/* Lock Status Visual Icon */}
                 <div className="relative">
                   <img
-                    src={locked ? '/images/locked.png' : '/images/unlocked.png'}
+                    src={locked ? locked_png : unlocked_png}
                     alt={locked ? 'Locked' : 'Unlocked'}
                     className={`w-24 h-24 object-contain transition-transform duration-300 ${
                       changing ? 'animate-spin-slow' : 'group-hover:scale-110'

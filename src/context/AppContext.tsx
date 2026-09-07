@@ -8,7 +8,7 @@ import {
   EmergencyAlert,
   TabType,
 } from '../types';
-
+import user_png from './../assets/images/user.png';
 
 interface AppContextType {
   currentUser: Profile | null;
@@ -54,7 +54,7 @@ const defaultProfiles: Profile[] = [
     username: 'Administrator',
     password: 'admin123',
     type: 'admin',
-    avatarUrl: '/images/user.png',
+    avatarUrl: user_png,
     time: [0, 1440],
     permission: 'Admin Privilege',
     joinedDate: 'Jan 15, 2026',
@@ -65,7 +65,7 @@ const defaultProfiles: Profile[] = [
     username: 'User123test',
     password: 'user',
     type: 'user',
-    avatarUrl: '/images/user.png',
+    avatarUrl: user_png,
     time: [600, 780],
     permission: 'Standard User Access',
     joinedDate: 'Feb 10, 2026',
@@ -207,7 +207,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [locked, setLocked] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem('locked');
-      return saved !== null ? saved === 'true' : true;
+      return saved !== null ? saved === 'true' : false;
     } catch {
       return true;
     }
@@ -400,8 +400,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (changing) return;
     setChanging(true);
 
-    let websocket = new WebSocket('ws://192.168.4.1/ws');
-    websocket.send("toggle");
+    // Send "toggle" command via WebSocket to ws://192.168.4.1/ws
+    try {
+      const websocket = new WebSocket('ws://192.168.4.1/ws');
+
+      websocket.onopen = () => {
+        try {
+          websocket.send('toggle');
+          console.log('[SmartLock] WebSocket opened. Successfully sent "toggle" to ws://192.168.4.1/ws');
+        } catch (sendError) {
+          console.error('[SmartLock] Error sending "toggle" message:', sendError);
+        }
+      };
+
+      websocket.onmessage = (event) => {
+        console.log('[SmartLock] WebSocket message received from lock:', event.data);
+      };
+
+      websocket.onerror = (err) => {
+        console.warn('[SmartLock] WebSocket error connecting to ws://192.168.4.1/ws:', err);
+      };
+
+      websocket.onclose = () => {
+        console.log('[SmartLock] WebSocket connection to ws://192.168.4.1/ws closed');
+      };
+    } catch (err) {
+      console.warn('[SmartLock] Failed to create WebSocket connection to ws://192.168.4.1/ws:', err);
+    }
 
     setTimeout(() => {
       const now = new Date();
@@ -546,7 +571,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       isOnline: false,
       lastActive: 'Never logged in',
       permission: userData.permission || (userData.type === 'admin' ? 'Admin Privilege' : 'Standard User Access'),
-      avatarUrl: userData.avatarUrl || 'user/images.png',
+      avatarUrl: userData.avatarUrl || user_png,
     };
 
     setProfiles((prev) => [...prev, newProfile]);

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { KeyRound, Camera, Upload, Check, X, AlertCircle } from 'lucide-react';
+import user_png from './../assets/images/user.png';
 
 interface ProfileEditModalProps {
   isOpen: boolean;
@@ -9,12 +10,12 @@ interface ProfileEditModalProps {
 }
 
 const sampleAvatars = [
-  './../assets/images/user.png',
-  './../assets/images/user.png',
-  './../assets/images/user.png',
-  './../assets/images/user.png',
-  './../assets/images/user.png',
-  './../assets/images/user.png',
+  user_png,
+  user_png,
+  user_png,
+  user_png,
+  user_png,
+  user_png,
 ];
 
 export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
@@ -217,7 +218,7 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
             <div className="flex flex-col items-center justify-center space-y-2">
               <div className="relative">
                 <img
-                  src={selectedPhoto || '/images/user.png'}
+                  src={selectedPhoto || user_png}
                   alt="Profile Photo Preview"
                   className="w-20 h-20 rounded-full object-cover border-2 border-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.3)]"
                 />

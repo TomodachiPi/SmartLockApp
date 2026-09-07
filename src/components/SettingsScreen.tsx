@@ -40,6 +40,7 @@ import {
   Search,
   User,
 } from 'lucide-react';
+import user_png from './../assets/images/user.png';
 
 interface LanguageOption {
   code: string;
@@ -271,7 +272,7 @@ export const SettingsScreen: React.FC = () => {
               <div className="flex items-center gap-3.5">
                 <div className="relative group">
                   <img
-                    src={currentUser?.avatarUrl || '/images/user.png'}
+                    src={currentUser?.avatarUrl || user_png}
                     alt="Profile Avatar"
                     className="w-16 h-16 rounded-full object-cover border-2 border-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.3)]"
                   />
@@ -426,7 +427,7 @@ export const SettingsScreen: React.FC = () => {
                         <div className="flex items-center gap-3">
                           <div className="relative shrink-0">
                             <img
-                              src={profile.avatarUrl || '/images/user.png'}
+                              src={profile.avatarUrl || user_png}
                               alt={profile.username}
                               className="w-10 h-10 rounded-full object-cover border border-slate-700 group-hover:border-cyan-400/80 transition-colors"
                             />
@@ -680,7 +681,7 @@ export const SettingsScreen: React.FC = () => {
                   >
                     <div className="relative">
                       <img
-                        src={p.avatarUrl || '/images/user.png'}
+                        src={p.avatarUrl || user_png}
                         alt={p.username}
                         className="w-7 h-7 rounded-full object-cover border border-slate-600"
                       />

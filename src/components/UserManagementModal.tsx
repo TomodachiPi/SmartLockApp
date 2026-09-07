@@ -17,6 +17,7 @@ import {
   Mail,
   User,
 } from 'lucide-react';
+import user_png from './../assets/images/user.png';
 
 interface UserManagementModalProps {
   isSelf: boolean;
@@ -40,12 +41,12 @@ interface UserManagementModalProps {
 }
 
 const sampleAvatars = [
-  '/images/user.png',
-  '/images/user.png',
-  '/images/user.png',
-  '/images/user.png',
-  '/images/user.png',
-  '/images/user.png'
+  user_png,
+  user_png,
+  user_png,
+  user_png,
+  user_png,
+  user_png
 ];
 
 export const UserManagementModal: React.FC<UserManagementModalProps> = ({

@@ -14,6 +14,7 @@ import {
   Sliders,
   ChevronRight,
 } from 'lucide-react';
+import padlock_png from "./../assets/images/padlock.png";
 
 export const AuthScreen: React.FC = () => {
   const { login, registerRequest, registrationNotice, dismissRegistrationNotice, locked } = useApp();
@@ -89,7 +90,7 @@ export const AuthScreen: React.FC = () => {
         <div className="relative mb-3">
           <div className="absolute -inset-2 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-full blur-xl opacity-30 animate-pulse-slow" />
           <img
-            src="/images/padlock.png"
+            src={padlock_png}
             alt="SmartLock Padlock"
             className="w-42 h-42 object-contain relative drop-shadow-[0_10px_20px_rgba(6,182,212,0.3)]"
           />

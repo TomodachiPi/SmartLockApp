@@ -1,4 +1,5 @@
 import React from 'react';
+import trash_png from "./../assets/images/trash.png";
 
 interface UserCardProps {
   label: string;
@@ -34,7 +35,7 @@ export const UserCard: React.FC<UserCardProps> = ({
             className="text-white/40 hover:text-[#ff5252] p-2 rounded-lg transition-colors cursor-pointer"
             title="Delete user schedule"
           >
-            <img src="/images/trash.png" alt="Delete" className="w-5 h-5 object-contain" />
+            <img src={trash_png} alt="Delete" className="w-5 h-5 object-contain" />
           </button>
         )}
       </div>
