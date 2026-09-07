@@ -17,7 +17,7 @@ const emergencyReasons = [
 ];
 
 export const EmergencyModal: React.FC<EmergencyModalProps> = ({ isOpen, onClose }) => {
-  const { triggerEmergency, currentUser } = useApp();
+  const { triggerEmergency, currentUser, toggleLock } = useApp();
   const [selectedReason, setSelectedReason] = useState(emergencyReasons[0]);
   const [customNotes, setCustomNotes] = useState('');
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -28,6 +28,7 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({ isOpen, onClose 
     e.preventDefault();
     triggerEmergency(selectedReason, customNotes.trim());
     setIsSubmitted(true);
+    //toggleLock();
 
     setTimeout(() => {
       setIsSubmitted(false);
@@ -61,14 +62,6 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({ isOpen, onClose 
               >
                 <X className="w-5 h-5" />
               </button>
-            </div>
-
-            {/* Warning Box */}
-            <div className="bg-red-950/40 border border-red-500/40 p-3 rounded-xl mb-4 text-sm text-red-200 leading-relaxed flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-1.5" />
-              <span>
-                The SmartLock will unlock immediately and priority security alerts for Administrators will be broadcasted when this override is triggerred.
-              </span>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">

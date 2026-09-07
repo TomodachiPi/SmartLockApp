@@ -4,6 +4,7 @@ import { AccessCard } from './AccessCard';
 import { WelcomeBanner } from './WelcomeBanner';
 import { EmergencyBanner } from './EmergencyBanner';
 import { EmergencyModal } from './EmergencyModal';
+import { IoTWebSocketModal } from './IoTWebSocketModal';
 import {
   AlertTriangle,
   Shield,
@@ -19,44 +20,26 @@ import unlocked_png from './../assets/images/unlocked.png';
 import user_png from './../assets/images/user.png';
 
 export const LockScreen: React.FC = () => {
-  const { currentUser, locked, changing, toggleLock, userSchedules } = useApp();
+  const {
+    currentUser,
+    locked,
+    changing,
+    toggleLock,
+    userSchedules,
+    lockProgress,
+    remainingLockTime,
+    wsStatus,
+    wsUrl,
+  } = useApp();
 
   const [greeting, setGreeting] = useState('Good Morning,');
   const [time, setTime] = useState(new Date().toLocaleTimeString());
   const [isEmergencyModalOpen, setIsEmergencyModalOpen] = useState(false);
-  const [progress, setProgress] = useState(0);
+  const [isWsModalOpen, setIsWsModalOpen] = useState(false);
 
   const username = currentUser?.username || 'Administrator';
   const isAdmin = currentUser?.type === 'admin';
   const doorName = 'Laboratory SmartLock #1';
-  const duration = 23000; // 42000; // change this depending on information from the SmartLock
-
-  useEffect(() => {
-    let animationFrameId: number;
-    let startTime: number | null = null;
-
-    if (changing) {
-      setProgress(0);
-      const updateProgress = (timestamp: number) => {
-        if (!startTime) startTime = timestamp;
-        const elapsed = timestamp - startTime;
-        const currentProgress = Math.min(Math.round((elapsed / duration) * 100), 100);
-        setProgress(currentProgress);
-
-        if (elapsed < duration) {
-          animationFrameId = requestAnimationFrame(updateProgress);
-        }
-      };
-
-      animationFrameId = requestAnimationFrame(updateProgress);
-    } else {
-      setProgress(0);
-    }
-
-    return () => {
-      if (animationFrameId) cancelAnimationFrame(animationFrameId);
-    };
-  }, [changing]);
 
   const mySchedule = userSchedules.find(
     (s) => s.label.toLowerCase() === currentUser?.username.toLowerCase()
@@ -132,10 +115,33 @@ export const LockScreen: React.FC = () => {
             <BatteryCharging className="w-3.5 h-3.5 text-emerald-400" />
             <span>98% BATTERY</span>
           </div>
-          <div className="flex items-center gap-1.5" title="Local WebSocket server: ws://192.168.4.1/ws">
-            <Shield className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Secured</span>
-          </div>
+          <button
+            id="open-iot-monitor-btn"
+            onClick={() => setIsWsModalOpen(true)}
+            className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-[#090d16] hover:bg-slate-800 border border-slate-700 transition cursor-pointer text-slate-300 hover:text-white"
+            title={`IoT WebSocket: ${wsUrl} (${wsStatus}) - Click to configure / monitor`}
+          >
+            <Radio
+              className={`w-3 h-3 ${
+                wsStatus === 'connected'
+                  ? 'text-emerald-400 animate-pulse'
+                  : wsStatus === 'simulated'
+                  ? 'text-cyan-400'
+                  : wsStatus === 'connecting'
+                  ? 'text-amber-400 animate-spin'
+                  : 'text-rose-400'
+              }`}
+            />
+            <span className="font-bold">
+              {wsStatus === 'connected'
+                ? 'IoT: Online'
+                : wsStatus === 'simulated'
+                ? 'IoT: Sim'
+                : wsStatus === 'connecting'
+                ? 'IoT: Sync...'
+                : 'IoT: Offline'}
+            </span>
+          </button>
         </div>
       </div>
 
@@ -188,7 +194,6 @@ export const LockScreen: React.FC = () => {
                     : 'bg-gradient-to-b from-[#112421] to-[#0c1615] border-emerald-500 shadow-[0_0_35px_rgba(16,185,129,0.35)]'
                 }`}
               >
-                {/* Lock Status Visual Icon */}
                 <div className="relative">
                   <img
                     src={locked ? locked_png : unlocked_png}
@@ -216,59 +221,65 @@ export const LockScreen: React.FC = () => {
             {changing && (
             <div id="lock-progress-container" className="w-full mt-4 pt-3 border-t border-slate-800/80 px-1">
               <div className="flex items-center justify-between text-[11px] font-mono mb-1.5 gap-3">
-                <div className="w-full h-3 bg-[#090d16] rounded-full overflow-hidden border border-slate-800 p-0.5 relative shadow-inner">
+                <div className="w-full h-3.5 bg-[#090d16] rounded-full overflow-hidden border border-slate-800 p-0.5 relative shadow-inner">
                   <div
                     id="lock-progress-bar"
                     role="progressbar"
-                    aria-valuenow={changing ? progress : locked ? 0 : 100}
+                    aria-valuenow={lockProgress}
                     aria-valuemin={0}
                     aria-valuemax={100}
-                    style={{ width: `${changing ? progress : locked ? 0 : 100}%` }}
-                    className={`h-full rounded-full transition-all duration-75 ease-linear relative ${
-                      changing
-                        ? locked
-                          ? 'bg-gradient-to-r from-teal-500 via-cyan-400 to-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.7)]'
-                          : 'bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.7)]'
-                        : locked
-                        ? 'bg-transparent w-0'
-                        : 'bg-emerald-500/90 shadow-[0_0_10px_rgba(16,185,129,0.4)]'
+                    style={{ width: `${lockProgress}%` }}
+                    className={`h-full rounded-full transition-all duration-300 ease-out relative ${
+                      locked
+                        ? 'bg-gradient-to-r from-teal-500 via-cyan-400 to-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.7)]'
+                        : 'bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.7)]'
                     }`}
                   >
-                    {changing && (
-                      <div className="absolute inset-0 bg-white/30 animate-pulse rounded-full" />
-                    )}
+                    <div className="absolute inset-0 bg-white/30 animate-pulse rounded-full" />
                   </div>
                 </div>
 
                 <span
                   id="lock-progress-percentage"
                   className={`font-bold font-mono text-xs ${
-                    changing ? locked ? 'text-emerald-400' : 'text-rose-400' : 'text-slate-400'
+                    locked ? 'text-emerald-400' : 'text-rose-400'
                   }`}
                 >
-                  {changing ? `${progress}%` : locked ? '0%' : '100%'}
+                  {lockProgress}%
                 </span>
               </div>
 
-              {changing && (
-                <div className="flex items-center justify-center text-[16px] font-mono text-slate-500 mt-1">
-                  <span>{progress < 100 ? `${Math.max(0, Math.ceil((duration * (100 - progress)) / 100000))}s remaining` : 'Complete'}</span>
+              <div className="flex items-center justify-center text-[24px] font-mono mt-1 px-1">
+                <div className="text-slate-300 font-semibold">
+                  {remainingLockTime !== null ? (
+                    remainingLockTime > 0 ? (
+                      <span>{remainingLockTime}s remaining</span>
+                    ) : (
+                      <span className="text-emerald-400 font-bold">Finishing...</span>
+                    )
+                  ) : (
+                    <span className="text-slate-500">Connecting...</span>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
             )}
 
             {changing && (
-              <div className="flex items-center gap-2 mt-2 px-3 py-1 rounded-full bg-cyan-950/60 border border-cyan-500/30 text-[11px] font-mono text-cyan-300 animate-pulse">
+              <button
+                id="view-iot-telemetry-btn"
+                onClick={() => setIsWsModalOpen(true)}
+                className="flex items-center gap-2 mt-3 px-3.5 py-1.5 rounded-full bg-cyan-950/70 hover:bg-cyan-900 border border-cyan-500/40 text-[11px] font-mono text-cyan-300 transition cursor-pointer shadow-sm hover:scale-[1.02]"
+              >
                 <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
-                <span>Communicating with the SmartLock</span>
-              </div>
+                <span>View SmartLock IoT Connection Status</span>
+              </button>
             )}
           </div>
         </div>
       </div>
 
-      {locked && (
+      {(!changing) && locked && (
         <div className="px-4">
           <button
             id="emergency-departure-btn"
@@ -304,6 +315,11 @@ export const LockScreen: React.FC = () => {
       <EmergencyModal
         isOpen={isEmergencyModalOpen}
         onClose={() => setIsEmergencyModalOpen(false)}
+      />
+
+      <IoTWebSocketModal
+        isOpen={isWsModalOpen}
+        onClose={() => setIsWsModalOpen(false)}
       />
     </div>
   );

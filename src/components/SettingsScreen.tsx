@@ -4,6 +4,7 @@ import { ScheduleCard } from './ScheduleCard';
 import { ProfileEditModal } from './ProfileEditModal';
 import { AccessScheduleModal } from './AccessScheduleModal';
 import { UserManagementModal } from './UserManagementModal';
+import { IoTWebSocketModal } from './IoTWebSocketModal';
 import { UserSchedule, Profile } from '../types';
 import {
   LogOut,
@@ -39,6 +40,8 @@ import {
   Edit3,
   Search,
   User,
+  Radio,
+  Wifi,
 } from 'lucide-react';
 import user_png from './../assets/images/user.png';
 
@@ -117,6 +120,11 @@ export const SettingsScreen: React.FC = () => {
     adminCreateUser,
     adminUpdateUser,
     adminDeleteUser,
+    wsStatus,
+    wsUrl,
+    setWsUrl,
+    isSimulatorActive,
+    setIsSimulatorActive,
   } = useApp();
 
   const isAdmin = currentUser?.type === 'admin';
@@ -125,6 +133,7 @@ export const SettingsScreen: React.FC = () => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [modalDefaultTab, setModalDefaultTab] = useState<'password' | 'photo'>('password');
   const [isAccessModalOpen, setIsAccessModalOpen] = useState(false);
+  const [isWsModalOpen, setIsWsModalOpen] = useState(false);
   const [selectedScheduleToEdit, setSelectedScheduleToEdit] = useState<UserSchedule | null>(null);
 
   // Admin user directory management modal state
@@ -817,7 +826,7 @@ export const SettingsScreen: React.FC = () => {
         )}
 
         {/* SECTION 6: NOTIFICATIONS & TELEMETRY ALERTS */}
-        {(activeSection === 'all' || activeSection === 'system') && (
+        {isAdmin && (activeSection === 'all' || activeSection === 'system') && (
           <div id="section-notifications" className="bg-[#111827] rounded-2xl p-4 border border-slate-800 shadow-md space-y-3">
             <div className="flex items-center justify-between pb-2 border-b border-slate-800">
               <div className="flex items-center gap-2">
@@ -879,7 +888,7 @@ export const SettingsScreen: React.FC = () => {
           </div>
         )}
 
-        {(activeSection === 'all' || activeSection === 'system') && (
+        {isAdmin && (activeSection === 'all' || activeSection === 'system') && (
           <div id="section-hardware" className="bg-[#111827] rounded-2xl p-4 border border-slate-800 shadow-md space-y-3">
             <div className="flex items-center justify-between pb-2 border-b border-slate-800">
               <div className="flex items-center gap-2">
@@ -923,7 +932,43 @@ export const SettingsScreen: React.FC = () => {
                 </div>
               </div>
 
-              
+              {/* IoT Device WebSocket Telemetry Settings */}
+              <div className="bg-[#0f172a] p-3 rounded-xl border border-slate-800/80 space-y-3">
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <Radio className="w-4 h-4 text-cyan-400" />
+                    <div>
+                      <span className="font-bold text-white block">IoT WebSocket Connection</span>
+                      <span className="text-[10px] text-slate-400">Lock progress updates via ESP32 string messages</span>
+                    </div>
+                  </div>
+                  <span
+                    className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold uppercase ${
+                      wsStatus === 'connected'
+                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                        : wsStatus === 'simulated'
+                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                        : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                    }`}
+                  >
+                    {wsStatus === 'connected' ? 'Connected' : wsStatus === 'simulated' ? 'Simulator' : 'Offline'}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-800/80">
+                  <span className="text-[11px] font-mono text-slate-400 truncate max-w-[200px]">
+                    {wsUrl}
+                  </span>
+                  <button
+                    id="settings-open-ws-monitor-btn"
+                    type="button"
+                    onClick={() => setIsWsModalOpen(true)}
+                    className="px-2.5 py-1 rounded-lg bg-cyan-600/20 hover:bg-cyan-600/30 border border-cyan-500/40 text-cyan-300 text-[11px] font-mono font-bold transition cursor-pointer"
+                  >
+                    Open Monitor &amp; Config &rarr;
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -1001,6 +1046,11 @@ export const SettingsScreen: React.FC = () => {
           }}
         />
       )}
+
+      <IoTWebSocketModal
+        isOpen={isWsModalOpen}
+        onClose={() => setIsWsModalOpen(false)}
+      />
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import {
   Profile,
   ProfileRequest,
@@ -18,6 +18,18 @@ interface AppContextType {
   profileRequests: ProfileRequest[];
   locked: boolean;
   changing: boolean;
+  lockProgress: number;
+  remainingLockTime: number | null;
+  initialLockTime: number | null;
+  wsStatus: 'connected' | 'connecting' | 'disconnected' | 'simulated' | 'error';
+  wsUrl: string;
+  setWsUrl: (url: string) => void;
+  reconnectWebSocket: () => void;
+  isSimulatorActive: boolean;
+  setIsSimulatorActive: (active: boolean) => void;
+  wsLogs: Array<{ id: string; timestamp: string; type: 'send' | 'receive' | 'system'; text: string }>;
+  clearWsLogs: () => void;
+  sendCustomWsMessage: (message: string) => void;
   history: HistoryRecord[];
   userSchedules: UserSchedule[];
   labNotes: LabNoteSchedule[];
@@ -213,9 +225,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   });
 
-  // Changing lock animation state (3 seconds duration)
+  // Changing lock animation state
   const [changing, setChanging] = useState<boolean>(false);
-  //const [duration, setDuration] = useState<number>(0);
+  
+  // Real-time lock progress (0 - 100) driven by IoT WebSocket data
+  const [lockProgress, setLockProgress] = useState<number>(0);
+  // Remaining lock time received from the IoT device (e.g. 23, 20, 15, 0)
+  const [remainingLockTime, setRemainingLockTime] = useState<number | null>(null);
+  // Initial lock duration captured from the first string number received
+  const [initialLockTime, setInitialLockTime] = useState<number | null>(null);
+
+  // IoT WebSocket connection states
+  const [wsStatus, setWsStatus] = useState<'connected' | 'connecting' | 'disconnected' | 'simulated' | 'error'>('disconnected');
+  const [wsUrl, setWsUrlState] = useState<string>(() => {
+    return localStorage.getItem('smartlock_ws_url') || 'ws://192.168.4.1/ws';
+  });
+  const [isSimulatorActive, setIsSimulatorActiveState] = useState<boolean>(() => {
+    return localStorage.getItem('smartlock_simulator_active') === 'true';
+  });
+  const [wsLogs, setWsLogs] = useState<Array<{ id: string; timestamp: string; type: 'send' | 'receive' | 'system'; text: string }>>([
+    {
+      id: 'log-init',
+      timestamp: new Date().toLocaleTimeString(),
+      type: 'system',
+      text: 'SmartLock WebSocket initialized. Target: ws://192.168.4.1/ws',
+    },
+  ]);
+
+  const wsRef = useRef<WebSocket | null>(null);
+  const initialLockTimeRef = useRef<number | null>(null);
+  const simTimerRef = useRef<any>(null);
+  const watchdogTimerRef = useRef<any>(null);
+  const lockedRef = useRef(locked);
+  const currentUserRef = useRef(currentUser);
+
+  useEffect(() => {
+    lockedRef.current = locked;
+  }, [locked]);
+
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
 
   // History records
   const [history, setHistory] = useState<HistoryRecord[]>(() => {
@@ -226,6 +276,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return defaultHistory;
     }
   });
+
+  const historyRef = useRef(history);
+
+  useEffect(() => {
+    historyRef.current = history;
+  }, [history]);
 
   // Profile requests (pending user sign in requests)
   const [profileRequests, setProfileRequests] = useState<ProfileRequest[]>(() => {
@@ -396,79 +452,361 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setProfileRequests((prev) => prev.filter((r) => r.username !== username));
   };
 
+  const setWsUrl = (url: string) => {
+    setWsUrlState(url);
+    localStorage.setItem('smartlock_ws_url', url);
+    addWsLog('system', `Target WebSocket address updated to ${url}`);
+  };
+
+  const setIsSimulatorActive = (active: boolean) => {
+    setIsSimulatorActiveState(active);
+    localStorage.setItem('smartlock_simulator_active', String(active));
+    if (active) {
+      setWsStatus('simulated');
+      addWsLog('system', 'IoT Hardware Simulator activated (countdown string numbers enabled)');
+      if (wsRef.current) {
+        try { wsRef.current.close(); } catch {}
+      }
+    } else {
+      addWsLog('system', 'IoT Simulator deactivated. Connecting to hardware at ' + wsUrl);
+      connectWebSocket();
+    }
+  };
+
+  const addWsLog = (type: 'send' | 'receive' | 'system', text: string) => {
+    const entry = {
+      id: `ws-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      type,
+      text,
+    };
+    setWsLogs((prev) => [entry, ...prev.slice(0, 49)]);
+  };
+
+  const clearWsLogs = () => {
+    setWsLogs([]);
+  };
+
+  const finishLockTransition = () => {
+    if (simTimerRef.current) {
+      clearInterval(simTimerRef.current);
+      simTimerRef.current = null;
+    }
+    if (watchdogTimerRef.current) {
+      clearTimeout(watchdogTimerRef.current);
+      watchdogTimerRef.current = null;
+    }
+
+    const now = new Date();
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
+    let currentTime = '';
+    if (hours < 12) {
+      currentTime = `${hours === 0 ? 12 : hours}:${String(minutes).padStart(2, '0')} AM`;
+    } else if (hours === 12) {
+      currentTime = `12:${String(minutes).padStart(2, '0')} PM`;
+    } else {
+      currentTime = `${hours - 12}:${String(minutes).padStart(2, '0')} PM`;
+    }
+
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    const currentDate = `${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
+    const previousTime = historyRef.current.length > 0 ? historyRef.current[0].endingTime : '12:00 AM';
+
+    const willBeLocked = !lockedRef.current;
+
+    const newRecord: HistoryRecord = {
+      id: `hist-${Date.now()}`,
+      username: currentUserRef.current?.username || 'Administrator',
+      permission: currentUserRef.current?.type === 'admin' ? 'Admin Privilege' : 'Standard User Access',
+      userType: currentUserRef.current?.type || 'admin',
+      locked: willBeLocked,
+      startingTime: previousTime,
+      endingTime: currentTime,
+      date: currentDate,
+      timestamp: Date.now(),
+      notes: willBeLocked ? 'Door locked securely via IoT WebSocket' : 'Door opened with authorized credential via IoT WebSocket',
+    };
+
+    setHistory((prev) => [newRecord, ...prev]);
+    setLocked(willBeLocked);
+    setChanging(false);
+    setLockProgress(100);
+    setTimeout(() => {
+      setLockProgress(0);
+      setRemainingLockTime(null);
+      initialLockTimeRef.current = null;
+    }, 400);
+
+    addWsLog('system', `Lock transition complete: Unit is now ${willBeLocked ? 'LOCKED' : 'UNLOCKED'}`);
+  };
+
+  const handleIncomingWsMessage = (data: any) => {
+    const str = String(data).trim();
+    addWsLog('receive', `Received string: "${str}"`);
+
+    // Parse the string number representing remaining lock time
+    const num = parseFloat(str);
+    if (!isNaN(num) && isFinite(num)) {
+      if (initialLockTimeRef.current === null || num > initialLockTimeRef.current) {
+        initialLockTimeRef.current = num;
+        setInitialLockTime(num);
+      }
+
+      const total = initialLockTimeRef.current || num;
+      if (num <= 0) {
+        setLockProgress(100);
+        setRemainingLockTime(0);
+        finishLockTransition();
+      } else {
+        // Compute progress based on elapsed ratio: ((total - remaining) / total) * 100
+        const computed = total > 0 ? Math.min(99, Math.max(1, Math.round(((total - num) / total) * 100))) : 50;
+        setLockProgress(computed);
+        setRemainingLockTime(num);
+      }
+    } else {
+      // Handle semantic status responses
+      const lower = str.toLowerCase();
+      if (lower === 'done' || lower === 'complete' || lower === 'locked' || lower === 'unlocked' || lower === 'ok') {
+        finishLockTransition();
+      }
+    }
+  };
+
+  const connectWebSocket = () => {
+    if (isSimulatorActive) {
+      setWsStatus('simulated');
+      return;
+    }
+
+    if (wsRef.current) {
+      try {
+        wsRef.current.close();
+      } catch {}
+    }
+
+    setWsStatus('connecting');
+    addWsLog('system', `Connecting to IoT WebSocket at ${wsUrl}...`);
+
+    try {
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        setWsStatus('connected');
+        addWsLog('system', `WebSocket connection established to ${wsUrl}`);
+      };
+
+      ws.onmessage = (event) => {
+        handleIncomingWsMessage(event.data);
+      };
+
+      ws.onerror = (err) => {
+        console.warn('[SmartLock] WebSocket error on', wsUrl, err);
+        setWsStatus('error');
+        addWsLog('system', `WebSocket error on ${wsUrl} (device offline or network unreachable)`);
+      };
+
+      ws.onclose = () => {
+        setWsStatus('disconnected');
+        addWsLog('system', `WebSocket closed at ${wsUrl}`);
+      };
+    } catch (err: any) {
+      console.warn('[SmartLock] Failed to create WebSocket:', err);
+      setWsStatus('disconnected');
+      addWsLog('system', `Failed to open socket: ${err.message || 'Unknown error'}`);
+    }
+  };
+
+  useEffect(() => {
+    if (!isSimulatorActive) {
+      connectWebSocket();
+    } else {
+      setWsStatus('simulated');
+    }
+
+    return () => {
+      if (wsRef.current) {
+        try { wsRef.current.close(); } catch {}
+      }
+      if (simTimerRef.current) {
+        clearInterval(simTimerRef.current);
+      }
+      if (watchdogTimerRef.current) {
+        clearTimeout(watchdogTimerRef.current);
+      }
+    };
+  }, [wsUrl, isSimulatorActive]);
+
+  const reconnectWebSocket = () => {
+    addWsLog('system', 'Manually reconnecting WebSocket...');
+    connectWebSocket();
+  };
+
+  const sendCustomWsMessage = (message: string) => {
+    addWsLog('send', `Sent custom: "${message}"`);
+    if (isSimulatorActive) {
+      if (message.trim().toLowerCase() === 'toggle') {
+        toggleLock();
+      }
+      return;
+    }
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(message);
+    } else {
+      addWsLog('system', `Cannot send: WebSocket is not connected (${wsStatus})`);
+    }
+  };
+
   const toggleLock = () => {
     if (changing) return;
     setChanging(true);
+    setLockProgress(0);
+    setRemainingLockTime(null);
+    initialLockTimeRef.current = null;
 
-    // Send "toggle" command via WebSocket to ws://192.168.4.1/ws
-    try {
-      const websocket = new WebSocket('ws://192.168.4.1/ws');
+    addWsLog('send', 'Sent command: "toggle"');
 
-      websocket.onopen = () => {
-        try {
-          websocket.send('toggle');
-          console.log('[SmartLock] WebSocket opened. Successfully sent "toggle" to ws://192.168.4.1/ws');
-        } catch (sendError) {
-          console.error('[SmartLock] Error sending "toggle" message:', sendError);
+    // If Simulator is active, simulate IoT device string countdown responses:
+    if (isSimulatorActive) {
+      let simSeconds = 20; // 20-second default IoT countdown
+      initialLockTimeRef.current = simSeconds;
+      setInitialLockTime(simSeconds);
+      handleIncomingWsMessage(String(simSeconds));
+
+      simTimerRef.current = setInterval(() => {
+        simSeconds -= 1;
+        handleIncomingWsMessage(String(simSeconds));
+        if (simSeconds <= 0) {
+          if (simTimerRef.current) {
+            clearInterval(simTimerRef.current);
+            simTimerRef.current = null;
+          }
         }
-      };
-
-      websocket.onmessage = (event) => {
-        console.log('[SmartLock] WebSocket message received from lock:', event.data);
-      };
-
-      websocket.onerror = (err) => {
-        console.warn('[SmartLock] WebSocket error connecting to ws://192.168.4.1/ws:', err);
-      };
-
-      websocket.onclose = () => {
-        console.log('[SmartLock] WebSocket connection to ws://192.168.4.1/ws closed');
-      };
-    } catch (err) {
-      console.warn('[SmartLock] Failed to create WebSocket connection to ws://192.168.4.1/ws:', err);
+      }, 1000);
+      return;
     }
 
-    setTimeout(() => {
-      const now = new Date();
-      const hours = now.getHours();
-      const minutes = now.getMinutes();
-      let currentTime = '';
-      if (hours < 12) {
-        currentTime = `${hours === 0 ? 12 : hours}:${String(minutes).padStart(2, '0')} AM`;
-      } else if (hours === 12) {
-        currentTime = `12:${String(minutes).padStart(2, '0')} PM`;
-      } else {
-        currentTime = `${hours - 12}:${String(minutes).padStart(2, '0')} PM`;
+    // Real IoT WebSocket
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      try {
+        wsRef.current.send('toggle');
+        addWsLog('system', `Command "toggle" sent to IoT device at ${wsUrl}`);
+      } catch (err: any) {
+        addWsLog('system', `Error sending "toggle": ${err.message}`);
       }
+    } else {
+      // Connect on the fly if not open
+      addWsLog('system', `WebSocket not open, attempting connection to ${wsUrl}...`);
+      try {
+        const ws = new WebSocket(wsUrl);
+        wsRef.current = ws;
+        setWsStatus('connecting');
 
-      const months = [
-        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-      ];
-      const currentDate = `${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
+        ws.onopen = () => {
+          setWsStatus('connected');
+          addWsLog('system', `Connected! Sending command "toggle"...`);
+          ws.send('toggle');
+          addWsLog('send', 'Sent command: "toggle"');
+        };
 
-      const previousTime = history.length > 0 ? history[0].endingTime : '12:00 AM';
+        ws.onmessage = (event) => {
+          handleIncomingWsMessage(event.data);
+        };
 
-      const newRecord: HistoryRecord = {
-        id: `hist-${Date.now()}`,
-        username: currentUser?.username || 'Administrator',
-        permission: currentUser?.type === 'admin' ? 'Admin Privilege' : 'Standard User Access',
-        userType: currentUser?.type || 'admin',
-        locked: !locked,
-        startingTime: previousTime,
-        endingTime: currentTime,
-        date: currentDate,
-        timestamp: Date.now(),
-        notes: !locked ? 'Door locked securely' : 'Door opened with authorized credential',
-      };
+        ws.onerror = () => {
+          setWsStatus('error');
+          addWsLog('system', `Connection to ${wsUrl} failed. (Use IoT Simulator to test without hardware)`);
+        };
 
-      setHistory((prev) => [newRecord, ...prev]);
-      setLocked((prev) => !prev);
-      setChanging(false);
-    }, 23000); // change this shi to be changeable
+        ws.onclose = () => {
+          setWsStatus('disconnected');
+          addWsLog('system', 'Connection closed.');
+        };
+      } catch (e: any) {
+        addWsLog('system', `Failed to open socket: ${e.message}`);
+      }
+    }
+
+    // Safety watchdog: abort/reconcile after 60 seconds if hardware never responds with 0
+    watchdogTimerRef.current = setTimeout(() => {
+      addWsLog('system', 'Watchdog timeout: IoT device did not send completion signal in 60s. Finalizing lock.');
+      finishLockTransition();
+    }, 60000);
   };
 
   const triggerEmergency = (reason: string, notes?: string) => {
+    if (changing) return;
+    setChanging(true);
+    setLockProgress(0);
+    setRemainingLockTime(null);
+    initialLockTimeRef.current = null;
+
+    addWsLog('send', 'Sent command: "toggle"');
+
+    // If Simulator is active, simulate IoT device string countdown responses:
+    if (isSimulatorActive) {
+      let simSeconds = 20; // 20-second default IoT countdown
+      initialLockTimeRef.current = simSeconds;
+      setInitialLockTime(simSeconds);
+      handleIncomingWsMessage(String(simSeconds));
+
+      simTimerRef.current = setInterval(() => {
+        simSeconds -= 1;
+        handleIncomingWsMessage(String(simSeconds));
+        if (simSeconds <= 0) {
+          if (simTimerRef.current) {
+            clearInterval(simTimerRef.current);
+            simTimerRef.current = null;
+          }
+        }
+      }, 1000);
+      return;
+    }
+
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      try {
+        wsRef.current.send('toggle');
+        addWsLog('system', `Command "toggle" sent to IoT device at ${wsUrl}`);
+      } catch (err: any) {
+        addWsLog('system', `Error sending "toggle": ${err.message}`);
+      }
+    } else {
+      // Connect on the fly if not open
+      addWsLog('system', `WebSocket not open, attempting connection to ${wsUrl}...`);
+      try {
+        const ws = new WebSocket(wsUrl);
+        wsRef.current = ws;
+        setWsStatus('connecting');
+
+        ws.onopen = () => {
+          setWsStatus('connected');
+          addWsLog('system', `Connected! Sending command "toggle"...`);
+          ws.send('toggle');
+          addWsLog('send', 'Sent command: "toggle"');
+        };
+
+        ws.onmessage = (event) => {
+          handleIncomingWsMessage(event.data);
+        };
+
+        ws.onerror = () => {
+          setWsStatus('error');
+          addWsLog('system', `Connection to ${wsUrl} failed. (Use IoT Simulator to test without hardware)`);
+        };
+
+        ws.onclose = () => {
+          setWsStatus('disconnected');
+          addWsLog('system', 'Connection closed.');
+        };
+      } catch (e: any) {
+        addWsLog('system', `Failed to open socket: ${e.message}`);
+      }
+    }
+
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -486,8 +824,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setEmergencyAlerts((prev) => [newAlert, ...prev]);
 
+    //const willBeLocked = !lockedRef.current;
+
     // Force door to unlocked state in emergency
-    setLocked(false);
+    
 
     // Record emergency log
     const emergencyRecord: HistoryRecord = {
@@ -506,6 +846,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setHistory((prev) => [emergencyRecord, ...prev]);
+    setLocked(false);
+
+    // Safety watchdog: abort/reconcile after 60 seconds if hardware never responds with 0
+    watchdogTimerRef.current = setTimeout(() => {
+      addWsLog('system', 'Watchdog timeout: IoT device did not send completion signal in 60s. Finalizing lock.');
+      finishLockTransition();
+    }, 60000);
   };
 
   const resolveEmergency = (id: string) => {
@@ -698,6 +1045,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         profileRequests,
         locked,
         changing,
+        lockProgress,
+        remainingLockTime,
+        initialLockTime,
+        wsStatus,
+        wsUrl,
+        setWsUrl,
+        reconnectWebSocket,
+        isSimulatorActive,
+        setIsSimulatorActive,
+        wsLogs,
+        clearWsLogs,
+        sendCustomWsMessage,
         history,
         userSchedules,
         labNotes,
