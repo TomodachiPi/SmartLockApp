@@ -270,8 +270,9 @@ export const AuthScreen: React.FC = () => {
 
             {/* Default credentials quick switcher */}
             <div className="mt-4 p-3.5 bg-[#111827] border border-slate-800 rounded-2xl text-xs text-slate-400 space-y-2">
-              <div className="flex items-center gap-1.5 text-white font-mono text-[16px] font-bold">
-                <span>(TAPNO LANG ALISTO AGDEBUG, REMINDER NGA IKATEN ETOY!!!)</span>
+              <div className="flex items-center gap-1.5 text-white font-mono text-xs font-bold">
+                <Shield className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Quick Demo Accounts:</span>
               </div>
               <div className="flex justify-between items-center bg-[#090d16] p-2 rounded-xl border border-slate-800/80">
                 <div>

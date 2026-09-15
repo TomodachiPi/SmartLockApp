@@ -8,6 +8,7 @@ import { IoTWebSocketModal } from './IoTWebSocketModal';
 import {
   AlertTriangle,
   Shield,
+  ShieldAlert,
   Wifi,
   BatteryCharging,
   Cpu,
@@ -28,6 +29,7 @@ export const LockScreen: React.FC = () => {
     userSchedules,
     lockProgress,
     remainingLockTime,
+    isEmergencyOverrideInProgress,
     wsStatus,
     wsUrl,
   } = useApp();
@@ -95,9 +97,8 @@ export const LockScreen: React.FC = () => {
         </div>
 
         <div className="text-right">
-          <div className="flex items-center justify-end gap-1.5 text-[10px] font-mono text-cyan-400">
-            <Radio className="w-3 h-3 animate-pulse text-emerald-400" />
-            <span>SYNCED</span>
+          <div className="flex items-center justify-end text-[12px] font-mono text-cyan-400">
+            <span>Time Zone: (GMT+8)</span>
           </div>
           <p className="text-base font-mono font-bold text-white tracking-wider">{time}</p>
         </div>
@@ -134,12 +135,12 @@ export const LockScreen: React.FC = () => {
             />
             <span className="font-bold">
               {wsStatus === 'connected'
-                ? 'IoT: Online'
+                ? 'Online'
                 : wsStatus === 'simulated'
-                ? 'IoT: Sim'
+                ? 'Simulated'
                 : wsStatus === 'connecting'
-                ? 'IoT: Sync...'
-                : 'IoT: Offline'}
+                ? 'Sync...'
+                : 'Offline'}
             </span>
           </button>
         </div>
@@ -186,7 +187,9 @@ export const LockScreen: React.FC = () => {
                 disabled={changing}
                 className={`relative group flex flex-col items-center justify-center w-48 h-48 rounded-full transition-all duration-300 transform active:scale-95 cursor-pointer border-4 ${
                   changing
-                    ? 'cursor-wait scale-105 border-cyan-400 shadow-[0_0_40px_rgba(6,182,212,0.4)]'
+                    ? isEmergencyOverrideInProgress
+                      ? 'cursor-wait scale-105 border-red-500 shadow-[0_0_50px_rgba(239,68,68,0.7)] animate-pulse'
+                      : 'cursor-wait scale-105 border-cyan-400 shadow-[0_0_40px_rgba(6,182,212,0.4)]'
                     : 'hover:scale-105'
                 } ${
                   locked
@@ -206,10 +209,18 @@ export const LockScreen: React.FC = () => {
 
                 <span
                   className={`text-base font-mono font-black mt-2 tracking-widest ${
-                    locked ? 'text-red-400' : 'text-emerald-400'
+                    locked
+                      ? 'text-red-400'
+                      : 'text-emerald-400'
                   }`}
                 >
-                  {changing ? (locked ? 'UNLOCKING...' : 'LOCKING...') : locked ? 'LOCKED' : 'UNLOCKED'}
+                  {changing
+                    ? locked
+                      ? 'UNLOCKING...'
+                      : 'LOCKING...'
+                    : locked
+                    ? 'LOCKED'
+                    : 'UNLOCKED'}
                 </span>
               </button>
             </div>
@@ -230,9 +241,8 @@ export const LockScreen: React.FC = () => {
                     aria-valuemax={100}
                     style={{ width: `${lockProgress}%` }}
                     className={`h-full rounded-full transition-all duration-300 ease-out relative ${
-                      locked
-                        ? 'bg-gradient-to-r from-teal-500 via-cyan-400 to-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.7)]'
-                        : 'bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.7)]'
+                      locked ? 'bg-gradient-to-r from-teal-500 via-cyan-400 to-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.7)]'
+                      : 'bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.7)]'
                     }`}
                   >
                     <div className="absolute inset-0 bg-white/30 animate-pulse rounded-full" />
@@ -241,9 +251,7 @@ export const LockScreen: React.FC = () => {
 
                 <span
                   id="lock-progress-percentage"
-                  className={`font-bold font-mono text-xs ${
-                    locked ? 'text-emerald-400' : 'text-rose-400'
-                  }`}
+                  className={`font-bold font-mono text-xs`}
                 >
                   {lockProgress}%
                 </span>
@@ -255,7 +263,7 @@ export const LockScreen: React.FC = () => {
                     remainingLockTime > 0 ? (
                       <span>{remainingLockTime}s remaining</span>
                     ) : (
-                      <span className="text-emerald-400 font-bold">Finishing...</span>
+                      <span className={isEmergencyOverrideInProgress ? 'text-amber-400 font-bold' : 'text-emerald-400 font-bold'}>Finishing...</span>
                     )
                   ) : (
                     <span className="text-slate-500">Connecting...</span>
@@ -269,9 +277,13 @@ export const LockScreen: React.FC = () => {
               <button
                 id="view-iot-telemetry-btn"
                 onClick={() => setIsWsModalOpen(true)}
-                className="flex items-center gap-2 mt-3 px-3.5 py-1.5 rounded-full bg-cyan-950/70 hover:bg-cyan-900 border border-cyan-500/40 text-[11px] font-mono text-cyan-300 transition cursor-pointer shadow-sm hover:scale-[1.02]"
+                className={`flex items-center gap-2 mt-3 px-3.5 py-1.5 rounded-full text-[11px] font-mono transition cursor-pointer shadow-sm hover:scale-[1.02] border ${
+                  isEmergencyOverrideInProgress
+                    ? 'bg-red-950/80 hover:bg-red-900 border-red-500/50 text-red-200'
+                    : 'bg-cyan-950/70 hover:bg-cyan-900 border-cyan-500/40 text-cyan-300'
+                }`}
               >
-                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
+                <span className={`w-2 h-2 rounded-full animate-ping ${isEmergencyOverrideInProgress ? 'bg-red-400' : 'bg-cyan-400'}`} />
                 <span>View SmartLock IoT Connection Status</span>
               </button>
             )}

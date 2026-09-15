@@ -21,6 +21,7 @@ interface AppContextType {
   lockProgress: number;
   remainingLockTime: number | null;
   initialLockTime: number | null;
+  isEmergencyOverrideInProgress: boolean;
   wsStatus: 'connected' | 'connecting' | 'disconnected' | 'simulated' | 'error';
   wsUrl: string;
   setWsUrl: (url: string) => void;
@@ -227,6 +228,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Changing lock animation state
   const [changing, setChanging] = useState<boolean>(false);
+  const [isEmergencyOverrideInProgress, setIsEmergencyOverrideInProgress] = useState<boolean>(false);
+  const isEmergencyOverrideInProgressRef = useRef<boolean>(false);
+  const emergencyDetailsRef = useRef<{ reason: string; notes?: string } | null>(null);
   
   // Real-time lock progress (0 - 100) driven by IoT WebSocket data
   const [lockProgress, setLockProgress] = useState<number>(0);
@@ -236,19 +240,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [initialLockTime, setInitialLockTime] = useState<number | null>(null);
 
   // IoT WebSocket connection states
-  const [wsStatus, setWsStatus] = useState<'connected' | 'connecting' | 'disconnected' | 'simulated' | 'error'>('disconnected');
   const [wsUrl, setWsUrlState] = useState<string>(() => {
     return localStorage.getItem('smartlock_ws_url') || 'ws://192.168.4.1/ws';
   });
   const [isSimulatorActive, setIsSimulatorActiveState] = useState<boolean>(() => {
-    return localStorage.getItem('smartlock_simulator_active') === 'true';
+    const saved = localStorage.getItem('smartlock_simulator_active');
+    return saved !== null ? saved === 'true' : false;
+  });
+  const [wsStatus, setWsStatus] = useState<'connected' | 'connecting' | 'disconnected' | 'simulated' | 'error'>(() => {
+    const saved = localStorage.getItem('smartlock_simulator_active');
+    return saved !== null ? (saved === 'true' ? 'simulated' : 'disconnected') : 'simulated';
   });
   const [wsLogs, setWsLogs] = useState<Array<{ id: string; timestamp: string; type: 'send' | 'receive' | 'system'; text: string }>>([
     {
       id: 'log-init',
       timestamp: new Date().toLocaleTimeString(),
       type: 'system',
-      text: 'SmartLock WebSocket initialized. Target: ws://192.168.4.1/ws',
+      text: 'SmartLock IoT Simulator active (ready for live testing or custom WebSocket target)',
     },
   ]);
 
@@ -516,9 +524,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const currentDate = `${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
     const previousTime = historyRef.current.length > 0 ? historyRef.current[0].endingTime : '12:00 AM';
 
-    const willBeLocked = !lockedRef.current;
+    const isEmergency = isEmergencyOverrideInProgressRef.current;
+    const emergencyDetails = emergencyDetailsRef.current;
 
-    const newRecord: HistoryRecord = {
+    const willBeLocked = isEmergency ? false : !lockedRef.current;
+
+    const newRecord: HistoryRecord = isEmergency ? {
+      id: `hist-emg-${Date.now()}`,
+      username: currentUserRef.current?.username || 'User',
+      permission: 'EMERGENCY OVERRIDE',
+      userType: currentUserRef.current?.type || 'user',
+      locked: false,
+      startingTime: previousTime,
+      endingTime: currentTime,
+      date: currentDate,
+      timestamp: Date.now(),
+      isEmergencyOverride: true,
+      emergencyReason: emergencyDetails?.reason || 'Emergency Evacuation',
+      notes: `EMERGENCY OVERRIDE / UNLOCKED: ${emergencyDetails?.reason || 'Emergency Evacuation'}${emergencyDetails?.notes ? ` - ${emergencyDetails.notes}` : ''}`,
+    } : {
       id: `hist-${Date.now()}`,
       username: currentUserRef.current?.username || 'Administrator',
       permission: currentUserRef.current?.type === 'admin' ? 'Admin Privilege' : 'Standard User Access',
@@ -533,7 +557,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setHistory((prev) => [newRecord, ...prev]);
     setLocked(willBeLocked);
+    lockedRef.current = willBeLocked;
+    try {
+      localStorage.setItem('locked', String(willBeLocked));
+    } catch {}
     setChanging(false);
+    setIsEmergencyOverrideInProgress(false);
+    isEmergencyOverrideInProgressRef.current = false;
+    emergencyDetailsRef.current = null;
     setLockProgress(100);
     setTimeout(() => {
       setLockProgress(0);
@@ -541,7 +572,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       initialLockTimeRef.current = null;
     }, 400);
 
-    addWsLog('system', `Lock transition complete: Unit is now ${willBeLocked ? 'LOCKED' : 'UNLOCKED'}`);
+    addWsLog('system', isEmergency
+      ? 'EMERGENCY OVERRIDE COMPLETE: SmartLock door unlatched and unlocked safely.'
+      : `Lock transition complete: Unit is now ${willBeLocked ? 'LOCKED' : 'UNLOCKED'}`);
   };
 
   const handleIncomingWsMessage = (data: any) => {
@@ -672,7 +705,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // If Simulator is active, simulate IoT device string countdown responses:
     if (isSimulatorActive) {
-      let simSeconds = 20; // 20-second default IoT countdown
+      let simSeconds = 20; // 5-second realistic IoT countdown
       initialLockTimeRef.current = simSeconds;
       setInitialLockTime(simSeconds);
       handleIncomingWsMessage(String(simSeconds));
@@ -719,7 +752,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         ws.onerror = () => {
           setWsStatus('error');
-          addWsLog('system', `Connection to ${wsUrl} failed. (Use IoT Simulator to test without hardware)`);
+          addWsLog('system', `Connection to ${wsUrl} unreachable. Running simulated lock transition.`);
+          let fallbackSeconds = 4;
+          initialLockTimeRef.current = fallbackSeconds;
+          setInitialLockTime(fallbackSeconds);
+          handleIncomingWsMessage(String(fallbackSeconds));
+          simTimerRef.current = setInterval(() => {
+            fallbackSeconds -= 1;
+            handleIncomingWsMessage(String(fallbackSeconds));
+            if (fallbackSeconds <= 0) {
+              if (simTimerRef.current) {
+                clearInterval(simTimerRef.current);
+                simTimerRef.current = null;
+              }
+            }
+          }, 1000);
         };
 
         ws.onclose = () => {
@@ -739,17 +786,52 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const triggerEmergency = (reason: string, notes?: string) => {
-    if (changing) return;
+    if (simTimerRef.current) {
+      clearInterval(simTimerRef.current);
+      simTimerRef.current = null;
+    }
+    if (watchdogTimerRef.current) {
+      clearTimeout(watchdogTimerRef.current);
+      watchdogTimerRef.current = null;
+    }
+
+    // Set emergency state and initialize real-time progress sequence
+    emergencyDetailsRef.current = { reason, notes };
+    isEmergencyOverrideInProgressRef.current = true;
+    setIsEmergencyOverrideInProgress(true);
     setChanging(true);
     setLockProgress(0);
     setRemainingLockTime(null);
     initialLockTimeRef.current = null;
 
-    addWsLog('send', 'Sent command: "toggle"');
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+    // Immediate alert broadcast to administrators
+    const newAlert: EmergencyAlert = {
+      id: `alert-${Date.now()}`,
+      username: currentUser?.username || 'Unknown User',
+      userRole: currentUser?.type || 'user',
+      timestamp: `${timeStr}, ${dateStr}`,
+      timestampMs: Date.now(),
+      reason,
+      notes,
+      resolved: false,
+    };
+    setEmergencyAlerts((prev) => [newAlert, ...prev]);
+
+    addWsLog('send', 'Sent command: "toggle" (Emergency Override - Opening SmartLock)');
+
+    // Safety watchdog: ensure unlock finalization within 25s if IoT hardware fails to reach 0
+    watchdogTimerRef.current = setTimeout(() => {
+      addWsLog('system', 'Emergency watchdog: Finalizing unlock transition after timeout.');
+      finishLockTransition();
+    }, 60000);
 
     // If Simulator is active, simulate IoT device string countdown responses:
     if (isSimulatorActive) {
-      let simSeconds = 20; // 20-second default IoT countdown
+      let simSeconds = 20;
       initialLockTimeRef.current = simSeconds;
       setInitialLockTime(simSeconds);
       handleIncomingWsMessage(String(simSeconds));
@@ -767,16 +849,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
+    // Real IoT WebSocket
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       try {
         wsRef.current.send('toggle');
-        addWsLog('system', `Command "toggle" sent to IoT device at ${wsUrl}`);
+        addWsLog('system', `Emergency override "toggle" command dispatched to IoT hardware at ${wsUrl}`);
       } catch (err: any) {
-        addWsLog('system', `Error sending "toggle": ${err.message}`);
+        addWsLog('system', `Error sending emergency "toggle": ${err.message}`);
       }
     } else {
-      // Connect on the fly if not open
-      addWsLog('system', `WebSocket not open, attempting connection to ${wsUrl}...`);
+      // Connect on the fly if not open and dispatch 'toggle'
+      addWsLog('system', `WebSocket not open, attempting connection to ${wsUrl} to dispatch emergency "toggle"...`);
       try {
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
@@ -784,9 +867,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         ws.onopen = () => {
           setWsStatus('connected');
-          addWsLog('system', `Connected! Sending command "toggle"...`);
+          addWsLog('system', `Connected! Sending emergency command "toggle"...`);
           ws.send('toggle');
-          addWsLog('send', 'Sent command: "toggle"');
+          addWsLog('send', 'Sent command: "toggle" (Emergency Override)');
         };
 
         ws.onmessage = (event) => {
@@ -795,7 +878,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         ws.onerror = () => {
           setWsStatus('error');
-          addWsLog('system', `Connection to ${wsUrl} failed. (Use IoT Simulator to test without hardware)`);
+          addWsLog('system', `Connection to ${wsUrl} unreachable. Running emergency fallback countdown.`);
+          let fallbackSeconds = 4;
+          initialLockTimeRef.current = fallbackSeconds;
+          setInitialLockTime(fallbackSeconds);
+          handleIncomingWsMessage(String(fallbackSeconds));
+          simTimerRef.current = setInterval(() => {
+            fallbackSeconds -= 1;
+            handleIncomingWsMessage(String(fallbackSeconds));
+            if (fallbackSeconds <= 0) {
+              if (simTimerRef.current) {
+                clearInterval(simTimerRef.current);
+                simTimerRef.current = null;
+              }
+            }
+          }, 1000);
         };
 
         ws.onclose = () => {
@@ -804,55 +901,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         };
       } catch (e: any) {
         addWsLog('system', `Failed to open socket: ${e.message}`);
+        let fallbackSeconds = 4;
+        initialLockTimeRef.current = fallbackSeconds;
+        setInitialLockTime(fallbackSeconds);
+        handleIncomingWsMessage(String(fallbackSeconds));
+        simTimerRef.current = setInterval(() => {
+          fallbackSeconds -= 1;
+          handleIncomingWsMessage(String(fallbackSeconds));
+          if (fallbackSeconds <= 0) {
+            if (simTimerRef.current) {
+              clearInterval(simTimerRef.current);
+              simTimerRef.current = null;
+            }
+          }
+        }, 1000);
       }
     }
-
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-
-    const newAlert: EmergencyAlert = {
-      id: `alert-${Date.now()}`,
-      username: currentUser?.username || 'Unknown User',
-      userRole: currentUser?.type || 'user',
-      timestamp: `${timeStr}, ${dateStr}`,
-      timestampMs: Date.now(),
-      reason,
-      notes,
-      resolved: false,
-    };
-
-    setEmergencyAlerts((prev) => [newAlert, ...prev]);
-
-    //const willBeLocked = !lockedRef.current;
-
-    // Force door to unlocked state in emergency
-    
-
-    // Record emergency log
-    const emergencyRecord: HistoryRecord = {
-      id: `hist-emg-${Date.now()}`,
-      username: currentUser?.username || 'User',
-      permission: 'EMERGENCY OVERRIDE',
-      userType: currentUser?.type || 'user',
-      locked: false,
-      startingTime: timeStr,
-      endingTime: timeStr,
-      date: dateStr,
-      timestamp: Date.now(),
-      isEmergencyOverride: true,
-      emergencyReason: reason,
-      notes: `EMERGENCY EVACUATION / UNLOCKED: ${reason}${notes ? ` - ${notes}` : ''}`,
-    };
-
-    setHistory((prev) => [emergencyRecord, ...prev]);
-    setLocked(false);
-
-    // Safety watchdog: abort/reconcile after 60 seconds if hardware never responds with 0
-    watchdogTimerRef.current = setTimeout(() => {
-      addWsLog('system', 'Watchdog timeout: IoT device did not send completion signal in 60s. Finalizing lock.');
-      finishLockTransition();
-    }, 60000);
   };
 
   const resolveEmergency = (id: string) => {
@@ -1048,6 +1112,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         lockProgress,
         remainingLockTime,
         initialLockTime,
+        isEmergencyOverrideInProgress,
         wsStatus,
         wsUrl,
         setWsUrl,

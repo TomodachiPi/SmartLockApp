@@ -1,3 +1,45 @@
+              {isEmergencyOverrideInProgress && (
+                <div className="flex items-center justify-between text-[11px] font-mono text-red-400 mb-2 px-0.5">
+                  <span className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-red-400">
+                    <ShieldAlert className="w-4 h-4 text-red-500 animate-pulse" />
+                    Emergency Override Active
+                  </span>
+                  <span className="text-[10px] text-amber-300 font-bold bg-red-950/80 px-2 py-0.5 rounded border border-red-500/40">
+                    IoT Telemetry
+                  </span>
+                </div>
+              )}
+
+
+      {changing && isEmergencyOverrideInProgress && (
+        <div className="px-4">
+          <div className="w-full bg-red-950/60 border-2 border-red-500/80 p-3.5 rounded-2xl flex items-center justify-between text-red-200 shadow-[0_0_25px_rgba(239,68,68,0.3)]">
+            <div className="flex items-center gap-2.5">
+              <div className="bg-red-500 text-slate-950 p-2 rounded-xl animate-bounce">
+                <ShieldAlert className="w-5 h-5" />
+              </div>
+              <div>
+                <span className="text-sm font-bold text-white block">Emergency Unlatch in Progress</span>
+                <span className="text-xs text-red-300/90 block">IoT smartlock receiving toggle command • Unlatching door</span>
+              </div>
+            </div>
+            <span className="text-xs font-mono font-black text-amber-400 bg-black/60 px-2.5 py-1.5 rounded-lg border border-red-500/40">
+              {lockProgress}%
+            </span>
+          </div>
+        </div>
+      )}
+
+
+               ${
+                    isEmergencyOverrideInProgress
+                      ? 'text-amber-400'
+                      : locked
+                      ? 'text-emerald-400'
+                      : 'text-rose-400'
+                  }
+
+
             {/* Warning Box */}
             <div className="bg-red-950/40 border border-red-500/40 p-3 rounded-xl mb-4 text-sm text-red-200 leading-relaxed flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-1.5" />
