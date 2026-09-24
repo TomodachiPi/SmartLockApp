@@ -1,5 +1,5 @@
 import React from 'react';
-import { User, KeyRound, Lock, Unlock, Clock, Calendar, AlertTriangle } from 'lucide-react';
+import { User, KeyRound, Lock, Unlock, Clock, Calendar, AlertTriangle, ArrowRightLeft, FileText } from 'lucide-react';
 
 interface TimeCardProps {
   username: string;
@@ -22,12 +22,19 @@ export const TimeCard: React.FC<TimeCardProps> = ({
   notes,
   isEmergencyOverride,
 }) => {
+  const isRelinquished = notes?.toLowerCase().includes('relinquished');
+  const isGained = notes?.toLowerCase().includes('gained room access');
+
   return (
     <div
       id={`time-card-${username}-${startingTime.replace(/[^a-zA-Z0-9]/g, '')}`}
       className={`rounded-2xl p-4 shadow-lg border transition-all relative overflow-hidden ${
         isEmergencyOverride
           ? 'bg-gradient-to-r from-red-950/40 to-[#120d14] border-red-500/50'
+          : isRelinquished
+          ? 'bg-gradient-to-r from-amber-950/30 via-[#18131e] to-[#111827] border-amber-500/40'
+          : isGained
+          ? 'bg-gradient-to-r from-cyan-950/30 via-[#0f1c2b] to-[#111827] border-cyan-500/40'
           : 'bg-[#111827] border-slate-800 hover:border-slate-700'
       }`}
     >
@@ -47,6 +54,16 @@ export const TimeCard: React.FC<TimeCardProps> = ({
                 <AlertTriangle className="w-3 h-3" />
                 EMERGENCY OVERRIDE
               </span>
+            ) : isRelinquished ? (
+              <span className="text-[10px] px-2.5 py-0.5 rounded-md font-mono font-black uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1">
+                <ArrowRightLeft className="w-3 h-3" />
+                RELINQUISHED ACCESS
+              </span>
+            ) : isGained ? (
+              <span className="text-[10px] px-2.5 py-0.5 rounded-md font-mono font-black uppercase bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 flex items-center gap-1">
+                <ArrowRightLeft className="w-3 h-3" />
+                GAINED ACCESS
+              </span>
             ) : locked ? (
               <span className="text-[10px] px-2.5 py-0.5 rounded-md font-mono font-bold uppercase bg-red-500/15 text-red-400 border border-red-500/30 flex items-center gap-1">
                 <Lock className="w-3 h-3" />
@@ -60,12 +77,7 @@ export const TimeCard: React.FC<TimeCardProps> = ({
             )}
           </div>
         </div>
-
-        <div className="flex items-center gap-2 text-xs text-slate-400">
-          <KeyRound className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-          <span>{permission}</span>
-        </div>
-
+        
         <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-800/80 text-xs">
           <div className="flex items-center gap-1.5 text-slate-300 font-mono">
             <Clock className="w-3.5 h-3.5 text-cyan-400 shrink-0" />

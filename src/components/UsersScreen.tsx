@@ -45,6 +45,12 @@ export const UsersScreen: React.FC = () => {
   const [selectedScheduleToEdit, setSelectedScheduleToEdit] = useState<UserSchedule | null>(null);
 
   const isAdmin = currentUser?.type === 'admin';
+  const currentUsernameLower = (currentUser?.username || '').toLowerCase();
+  const displayedSchedules = isAdmin
+    ? userSchedules
+    : userSchedules.filter(
+        (s) => s.label.toLowerCase() === currentUsernameLower
+      );
 
   const handleOpenEdit = (tab: 'password' | 'photo') => {
     setModalDefaultTab(tab);
@@ -319,22 +325,36 @@ export const UsersScreen: React.FC = () => {
         )}
 
         {/* Schedule Cards List */}
-        <div className="space-y-2.5">
-          {userSchedules.map((sched) => (
-            <ScheduleCard
-              key={sched.id}
-              label={sched.label}
-              role={sched.role}
-              time={sched.time}
-              color={sched.color}
-              days={sched.days}
-              status={sched.status}
-              isAdminViewer={isAdmin}
-              onEdit={isAdmin ? () => handleOpenEditSchedule(sched) : undefined}
-              onDelete={isAdmin ? () => deleteSchedule(sched.id) : undefined}
-            />
-          ))}
-        </div>
+        {displayedSchedules.length === 0 ? (
+          <div className="bg-[#0f172a] p-4 rounded-xl border border-slate-800 text-center space-y-2">
+            <Clock className="w-5 h-5 text-cyan-400 mx-auto" />
+            <p className="text-xs font-bold text-white">Default Access Schedule Active</p>
+            <p className="text-[11px] text-slate-400 font-mono">
+              {currentUser?.time
+                ? `Authorized: ${Math.floor(currentUser.time[0] / 60)}:00 - ${Math.floor(currentUser.time[1] / 60)}:00, Monday to Friday`
+                : 'Standard hours: 09:00 AM — 05:00 PM, Monday to Friday'}
+            </p>
+            <span className="inline-block text-[10px] font-mono text-cyan-400 bg-cyan-950/60 border border-cyan-500/30 px-2.5 py-0.5 rounded-full">
+              Standard Clearance
+            </span>
+          </div>
+        ) : (
+          <div className="space-y-2.5">
+            {displayedSchedules.map((sched) => (
+              <ScheduleCard
+                key={sched.id}
+                label={sched.label}
+                role={sched.role}
+                time={sched.time}
+                days={sched.days}
+                status={sched.status}
+                isAdminViewer={isAdmin}
+                onEdit={isAdmin ? () => handleOpenEditSchedule(sched) : undefined}
+                onDelete={isAdmin ? () => deleteSchedule(sched.id) : undefined}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Edit Password & Photo Modal */}

@@ -146,7 +146,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
     }
 
     // Calculate time array
-    let timeRange: number[] = [480, 1080]; // 8 AM to 6 PM default
+    let timeRange: number[] = [480, 1080];
     if (role === 'admin' || clearancePreset === '24_7') {
       timeRange = [0, 1440];
     } else if (clearancePreset === 'morning') {

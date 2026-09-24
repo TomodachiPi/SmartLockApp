@@ -11,15 +11,6 @@ interface AccessScheduleModalProps {
 
 const DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-const COLOR_OPTIONS = [
-  { label: 'Cyan Cyber', value: '#06b6d4' },
-  { label: 'Emerald Shield', value: '#10b981' },
-  { label: 'Electric Blue', value: '#3b82f6' },
-  { label: 'Amber Alert', value: '#f59e0b' },
-  { label: 'Crimson Secure', value: '#ef4444' },
-  { label: 'Violet Core', value: '#a855f7' },
-];
-
 export const AccessScheduleModal: React.FC<AccessScheduleModalProps> = ({
   isOpen,
   onClose,
@@ -33,7 +24,6 @@ export const AccessScheduleModal: React.FC<AccessScheduleModalProps> = ({
   const [is24Hours, setIs24Hours] = useState(false);
   const [startTime, setStartTime] = useState('09:00 AM');
   const [endTime, setEndTime] = useState('05:00 PM');
-  const [color, setColor] = useState('#06b6d4');
   const [status, setStatus] = useState<'active' | 'restricted'>('active');
 
   const isAdmin = currentUser?.type === 'admin';
@@ -42,7 +32,6 @@ export const AccessScheduleModal: React.FC<AccessScheduleModalProps> = ({
     if (scheduleToEdit) {
       setLabel(scheduleToEdit.label);
       setRole(scheduleToEdit.role);
-      setColor(scheduleToEdit.color || '#06b6d4');
       setStatus(scheduleToEdit.status || 'active');
 
       if (scheduleToEdit.time.toLowerCase().includes('any time') || scheduleToEdit.time.toLowerCase().includes('24/7')) {
@@ -63,7 +52,6 @@ export const AccessScheduleModal: React.FC<AccessScheduleModalProps> = ({
       setIs24Hours(false);
       setStartTime('09:00 AM');
       setEndTime('05:00 PM');
-      setColor('#06b6d4');
       setStatus('active');
     }
   }, [scheduleToEdit, isOpen]);
@@ -109,7 +97,6 @@ export const AccessScheduleModal: React.FC<AccessScheduleModalProps> = ({
         label: label.trim(),
         role,
         time: timeString,
-        color,
         days: selectedDays,
         startTime: is24Hours ? '12:00 AM' : startTime,
         endTime: is24Hours ? '11:59 PM' : endTime,
@@ -120,7 +107,6 @@ export const AccessScheduleModal: React.FC<AccessScheduleModalProps> = ({
         label: label.trim(),
         role,
         time: timeString,
-        color,
         days: selectedDays,
         startTime: is24Hours ? '12:00 AM' : startTime,
         endTime: is24Hours ? '11:59 PM' : endTime,
@@ -312,26 +298,6 @@ export const AccessScheduleModal: React.FC<AccessScheduleModalProps> = ({
             )}
           </div>
           
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-300">Access Schedule Color Accent</label>
-            <div className="flex items-center gap-2">
-              {COLOR_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => setColor(opt.value)}
-                  className={`w-7 h-7 rounded-full border-2 transition-transform cursor-pointer flex items-center justify-center ${
-                    color === opt.value ? 'scale-115 border-white shadow-lg' : 'border-transparent hover:scale-105'
-                  }`}
-                  style={{ backgroundColor: opt.value }}
-                  title={opt.label}
-                >
-                  {color === opt.value && <Check className="w-3.5 h-3.5 text-white drop-shadow" />}
-                </button>
-              ))}
-            </div>
-          </div>
-
           {/* Action Buttons */}
           <div className="flex items-center gap-2 pt-3 border-t border-[#1e293b]">
             {scheduleToEdit && (

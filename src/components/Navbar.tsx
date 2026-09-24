@@ -4,11 +4,23 @@ import { TabType } from '../types';
 import { Lock, History, Calendar, SlidersHorizontal } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
-  const { activeTab, setActiveTab, profileRequests, currentUser, emergencyAlerts } = useApp();
+  const {
+    activeTab,
+    setActiveTab,
+    profileRequests,
+    currentUser,
+    emergencyAlerts,
+    roomTransfers,
+    adminNotifications,
+  } = useApp();
 
   const isAdmin = currentUser?.type === 'admin';
   const unreadAlerts = emergencyAlerts.filter((a) => !a.resolved).length;
   const pendingRequests = profileRequests.length;
+  const hasPendingTransfer = roomTransfers.some(
+    (t) => t.toUsername.toLowerCase() === currentUser?.username.toLowerCase() && t.status === 'pending'
+  );
+  const unreadAdminNotifs = adminNotifications.filter((n) => !n.read).length;
 
   const navItems: { id: TabType; label: string; icon: any }[] = [
     { id: 'lock', label: 'Lock', icon: Lock },
@@ -26,7 +38,8 @@ export const Navbar: React.FC = () => {
         const isActive = activeTab === item.id || (item.id === 'settings' && activeTab === 'users');
         const showBadge =
           (item.id === 'settings' && isAdmin && pendingRequests > 0) ||
-          (item.id === 'lock' && unreadAlerts > 0);
+          (item.id === 'lock' && (hasPendingTransfer || (isAdmin && unreadAlerts > 0))) ||
+          (item.id === 'history' && isAdmin && unreadAdminNotifs > 0);
 
         const IconComponent = item.icon;
 
@@ -49,13 +62,6 @@ export const Navbar: React.FC = () => {
               >
                 <IconComponent className="w-5 h-5" />
               </div>
-
-              {/* Notification Badges */}
-              {isAdmin && showBadge && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-slate-950 text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center animate-bounce shadow-md">
-                  {item.id === 'lock' ? '!' : pendingRequests}
-                </span>
-              )}
             </div>
 
             <span

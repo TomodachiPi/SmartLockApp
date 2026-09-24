@@ -1,3 +1,340 @@
+        <div className="flex items-center gap-2 text-xs text-slate-400">
+          <KeyRound className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+          <span>{permission}</span>
+        </div>
+
+
+
+              {/* Notification Badges */}
+              {showBadge && (
+                <span
+                  className={`absolute -top-1 -right-1 text-slate-950 text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow-md animate-pulse ${
+                    item.id === 'lock' && hasPendingTransfer
+                      ? 'bg-cyan-400'
+                      : 'bg-red-500 text-white'
+                  }`}
+                >
+                  {item.id === 'lock'
+                    ? hasPendingTransfer
+                      ? '1'
+                      : '!'
+                    : item.id === 'history'
+                    ? unreadAdminNotifs
+                    : pendingRequests}
+                </span>
+              )}
+
+
+        {/* Live Horizon Tag */}
+        <div className="flex items-center gap-1 text-[11px] font-mono text-cyan-400 bg-cyan-950/60 px-2.5 py-1 rounded-lg border border-cyan-800/50 self-start sm:self-auto">
+          <Clock className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+          <span>{rangeInfo}</span>
+        </div>
+
+
+        {/* Live Horizon Tag */}
+        <div className="flex items-center gap-1 text-[11px] font-mono text-cyan-400 bg-cyan-950/60 px-2.5 py-1 rounded-lg border border-cyan-800/50 self-start sm:self-auto">
+          <Clock className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+          <span>{rangeInfo}</span>
+        </div>
+
+
+          {/* Empty State */}
+          {totalCount === 0 && (
+            <div className="py-12 text-center text-slate-400 space-y-2.5 animate-fade-in">
+              <div className="w-12 h-12 mx-auto rounded-2xl bg-slate-800/80 border border-slate-700/60 flex items-center justify-center text-cyan-400/60 shadow-inner">
+                <Bell className="w-6 h-6" />
+              </div>
+              <h4 className="text-sm font-bold text-white">All Caught Up!</h4>
+              <p className="text-xs text-slate-400 max-w-xs mx-auto">
+                No active room transfer requests, pending emergencies, or unread alerts.
+              </p>
+            </div>
+          )}
+
+
+            {/* Handover Reason / Notes */}
+            <div className="space-y-1.5">
+              <label
+                htmlFor="transfer-notes-input"
+                className="text-xs font-mono font-bold text-slate-300 uppercase tracking-wider block"
+              >
+                Transfer Notes / Reason (Optional):
+              </label>
+              <input
+                id="transfer-notes-input"
+                type="text"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="e.g. Shift handover, Optics lab coverage, Experiment rotation..."
+                className="w-full bg-[#090d16] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+              />
+            </div>
+
+
+          <span className="text-[10px] font-mono text-cyan-400 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-500/30">
+            {isAdmin ? '24/7 Clearance' : 'Designated Lock/Unlock Window'}
+          </span>
+
+
+          <button
+            id="status-bar-notifications-btn"
+            type="button"
+            onClick={() => setIsNotificationsModalOpen(true)}
+            className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg border transition-all cursor-pointer shrink-0 ${
+              totalNotificationCount > 0
+                ? activeEmergenciesCount > 0
+                  ? 'bg-red-950/70 border-red-500 text-red-300 shadow-[0_0_12px_rgba(239,68,68,0.3)] animate-pulse'
+                  : pendingTransfersCount > 0
+                  ? 'bg-amber-950/70 border-amber-400 text-amber-200 shadow-[0_0_12px_rgba(245,158,11,0.3)] animate-pulse'
+                  : 'bg-cyan-950/60 border-cyan-400/80 text-cyan-300 shadow-[0_0_10px_rgba(6,182,212,0.25)]'
+                : 'bg-[#090d16] hover:bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'
+            }`}
+            title={`${totalNotificationCount} notification(s) - Click to view`}
+          >
+            <Bell
+              className={`w-3 h-3 ${
+                totalNotificationCount > 0
+                  ? activeEmergenciesCount > 0
+                    ? 'text-red-400 animate-bounce'
+                    : pendingTransfersCount > 0
+                    ? 'text-amber-400'
+                    : 'text-cyan-400'
+                  : 'text-slate-400'
+              }`}
+            />
+            <span className="font-bold">Notifs</span>
+            {totalNotificationCount > 0 ? (
+              <span
+                className={`px-1.5 py-0.2 rounded-full text-[9px] font-black ${
+                  activeEmergenciesCount > 0
+                    ? 'bg-red-500 text-white'
+                    : pendingTransfersCount > 0
+                    ? 'bg-amber-400 text-slate-950'
+                    : 'bg-cyan-400 text-slate-950'
+                }`}
+              >
+                {totalNotificationCount}
+              </span>
+            ) : (
+              <span className="text-slate-500 text-[9px]">0</span>
+            )}
+          </button>
+
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            <BatteryCharging className="w-3.5 h-3.5 text-emerald-400" />
+            <span>98% BATTERY</span>
+          </div>
+
+
+              {/* Auto-Lock Delay Selector */}
+              <div className="bg-[#0f172a] p-3 rounded-xl border border-slate-800/80 space-y-2">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <span className="font-bold text-white block">SmartLock Auto-Lock Delay</span>
+                    <span className="text-[10px] text-slate-400">Automatically locks the SmartLock after a set amount of time</span>
+                  </div>
+                  <span className="text-xs font-mono font-bold text-cyan-400">{autoLockDelay}</span>
+                </div>
+
+                <div className="grid grid-cols-5 gap-1.5 pt-1">
+                  {['10s', '30s', '60s', '120s', 'Off'].map((delay) => (
+                    <button
+                      key={delay}
+                      type="button"
+                      onClick={() => {
+                        setAutoLockDelay(delay);
+                        showToast(`Auto-lock delay set to ${delay}`);
+                      }}
+                      className={`py-1.5 rounded-lg text-[11px] font-mono font-bold transition-all cursor-pointer ${
+                        autoLockDelay === delay
+                          ? 'bg-cyan-500 text-slate-950 shadow-sm'
+                          : 'bg-[#1e293b] text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {delay}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+
+{/* SECTION 6: NOTIFICATIONS & TELEMETRY ALERTS */}
+        {isAdmin && (activeSection === 'all' || activeSection === 'system') && (
+          <div id="section-notifications" className="bg-[#111827] rounded-2xl p-4 border border-slate-800 shadow-md space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <Bell className="w-4 h-4 text-cyan-400" />
+                <div>
+                  <h3 className="text-sm font-bold text-white">Notifications & Alert Broadcasts</h3>
+                  <p className="text-[10px] text-slate-400">Manage notifications and real-time alert broadcasts</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3 pt-1 text-xs">
+              <div className="flex items-center justify-between bg-[#0f172a] p-3 rounded-xl border border-slate-800/80">
+                <div>
+                  <span className="font-bold text-white block">SmartLock Locking/Unlocking Alerts</span>
+                  <span className="text-[10px] text-slate-400">Broadcast immediate message upon lock state toggle</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNotifyLockState(!notifyLockState);
+                    showToast(`Lock state alerts ${!notifyLockState ? 'enabled' : 'disabled'}`);
+                  }}
+                  className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
+                    notifyLockState ? 'bg-cyan-500' : 'bg-slate-800'
+                  }`}
+                >
+                  <span
+                    className={`absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform ${
+                      notifyLockState ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+              
+              <div className="flex items-center justify-between bg-[#0f172a] p-3 rounded-xl border border-slate-800/80">
+                <div>
+                  <span className="font-bold text-white block">Low Battery Warning Notification</span>
+                  <span className="text-[10px] text-slate-400">Alert notification when SmartLock battery drops below 20%</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNotifyLowBattery(!notifyLowBattery);
+                    showToast(`Battery warnings ${!notifyLowBattery ? 'enabled' : 'disabled'}`);
+                  }}
+                  className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
+                    notifyLowBattery ? 'bg-red-500' : 'bg-slate-800'
+                  }`}
+                >
+                  <span
+                    className={`absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform ${
+                      notifyLowBattery ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+
+{(activeSection === 'all' || activeSection === 'system') && (
+          <div id="section-language" className="bg-[#111827] rounded-2xl p-4 border border-slate-800 shadow-md space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <Globe className="w-4 h-4 text-cyan-400" />
+                <div>
+                  <h3 className="text-sm font-bold text-white">App Language Settings</h3>
+                  <p className="text-[10px] text-slate-400">Select language for the app to use</p>
+                </div>
+              </div>
+              <span className="text-xs font-mono font-bold text-cyan-400">
+                {languageOptions.find((l) => l.code === selectedLanguage)?.name}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              {languageOptions.map((lang) => {
+                const isSelected = selectedLanguage === lang.code;
+                return (
+                  <button
+                    key={lang.code}
+                    id={`lang-btn-${lang.code}`}
+                    onClick={() => {
+                      setSelectedLanguage(lang.code);
+                      showToast(`Language switched to ${lang.name}`);
+                    }}
+                    className={`p-2.5 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-cyan-500/15 border-cyan-500/60 text-white shadow-[0_0_10px_rgba(6,182,212,0.2)]'
+                        : 'bg-[#0f172a] border-slate-800 text-slate-300 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">{lang.flag}</span>
+                      <div>
+                        <p className="text-xs font-bold">{lang.nativeName}</p>
+                        <p className="text-[10px] text-slate-400 font-mono">{lang.name}</p>
+                      </div>
+                    </div>
+                    {isSelected && <Check className="w-4 h-4 text-cyan-400 shrink-0" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {(activeSection === 'all' || activeSection === 'system') && (
+          <div id="section-theme" className="bg-[#111827] rounded-2xl p-4 border border-slate-800 shadow-md space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <Palette className="w-4 h-4 text-cyan-400" />
+                <div>
+                  <h3 className="text-sm font-bold text-white">Display Theme & Palette</h3>
+                  <p className="text-[10px] text-slate-400">Cyber security UI visual themes & glow accents</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2.5 pt-1">
+              {themeOptions.map((thm) => {
+                const isSelected = selectedTheme === thm.id;
+                return (
+                  <div
+                    key={thm.id}
+                    id={`theme-card-${thm.id}`}
+                    onClick={() => {
+                      setSelectedTheme(thm.id);
+                      showToast(`Theme applied: ${thm.name}`);
+                    }}
+                    className={`p-3 rounded-xl border flex items-center justify-between transition-all cursor-pointer ${
+                      isSelected
+                        ? `bg-[#131d2e] ${thm.colorBorder} shadow-[0_0_15px_rgba(6,182,212,0.2)]`
+                        : 'bg-[#0f172a] border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`w-6 h-6 rounded-full border-2 border-slate-700 flex items-center justify-center ${thm.bgPreview}`}
+                        style={{ borderColor: thm.accentColor }}
+                      >
+                        <div
+                          className="w-2.5 h-2.5 rounded-full"
+                          style={{ backgroundColor: thm.accentColor }}
+                        />
+                      </div>
+
+                      <div>
+                        <h4 className="text-xs font-bold text-white">{thm.name}</h4>
+                        <p className="text-[10px] text-slate-400">{thm.subtitle}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {isSelected ? (
+                        <span className="text-[10px] font-mono font-bold text-cyan-400 flex items-center gap-1">
+                          <Check className="w-3.5 h-3.5" />
+                          ACTIVE
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-mono text-slate-500">Select</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+
               {isEmergencyOverrideInProgress && (
                 <div className="flex items-center justify-between text-[11px] font-mono text-red-400 mb-2 px-0.5">
                   <span className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-red-400">

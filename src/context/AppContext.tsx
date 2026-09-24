@@ -7,8 +7,11 @@ import {
   LabNoteSchedule,
   EmergencyAlert,
   TabType,
+  RoomTransferRequest,
+  AdminLockNotification,
 } from '../types';
 import user_png from './../assets/images/user.png';
+import { generateMonthHistory } from '../data/mockMonthHistory';
 
 interface AppContextType {
   currentUser: Profile | null;
@@ -60,6 +63,15 @@ interface AppContextType {
   triggerEmergency: (reason: string, notes?: string) => void;
   resolveEmergency: (id: string) => void;
   onlineUsers: Profile[];
+  roomTransfers: RoomTransferRequest[];
+  adminNotifications: AdminLockNotification[];
+  activeRoomHolder: string | null;
+  initiateRoomTransfer: (toUsername: string, notes?: string) => { success: boolean; error?: string };
+  requestRoomAccess: (notes?: string) => { success: boolean; error?: string };
+  respondToRoomTransfer: (transferId: string, accept: boolean) => void;
+  dismissRoomTransfer: (transferId: string) => void;
+  markAdminNotificationAsRead: (id: string) => void;
+  clearAllAdminNotifications: () => void;
 }
 
 const defaultProfiles: Profile[] = [
@@ -84,6 +96,28 @@ const defaultProfiles: Profile[] = [
     joinedDate: 'Feb 10, 2026',
     isOnline: true,
     lastActive: 'Active 5m ago',
+  },
+  {
+    username: 'Sarah_Chen',
+    password: 'user',
+    type: 'user',
+    avatarUrl: user_png,
+    time: [480, 1080],
+    permission: 'Senior Researcher Access',
+    joinedDate: 'Mar 01, 2026',
+    isOnline: true,
+    lastActive: 'Active now',
+  },
+  {
+    username: 'Alex_Rivera',
+    password: 'user',
+    type: 'user',
+    avatarUrl: user_png,
+    time: [540, 1020],
+    permission: 'Lab Technician Access',
+    joinedDate: 'Mar 05, 2026',
+    isOnline: false,
+    lastActive: 'Active 2h ago',
   }
 ];
 
@@ -92,101 +126,47 @@ const defaultSchedules: UserSchedule[] = [
     id: '1',
     label: 'Administrator',
     role: 'admin',
-    time: 'Any time, Monday to Sunday',
-    color: '#ff6b6b',
+    time: '24/7 Unlimited Access, Monday to Sunday',
+    days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+    startTime: '12:00 AM',
+    endTime: '11:59 PM',
+    status: 'active',
   },
   {
     id: '2',
     label: 'User123test',
     role: 'user',
-    time: '10:00 AM to 1:00 PM, Tuesday',
-    color: '#4ecdc4',
+    time: '10:00 AM to 01:00 PM, Tuesday',
+    days: ['Tue'],
+    startTime: '10:00 AM',
+    endTime: '01:00 PM',
+    status: 'active',
   },
   {
     id: '3',
-    label: 'Research Interns',
+    label: 'Sarah_Chen',
     role: 'user',
-    time: '9:00 AM to 5:00 PM, Mon-Fri',
-    color: '#ffd166',
+    time: '08:00 AM to 06:00 PM, Mon-Fri',
+    days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+    startTime: '08:00 AM',
+    endTime: '06:00 PM',
+    status: 'active',
+  },
+  {
+    id: '4',
+    label: 'Alex_Rivera',
+    role: 'user',
+    time: '09:00 AM to 05:00 PM, Mon-Fri',
+    days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+    startTime: '09:00 AM',
+    endTime: '05:00 PM',
+    status: 'active',
   },
 ];
 
 const defaultLabNotes: LabNoteSchedule[] = [];
 
-const defaultHistory: HistoryRecord[] = [
-  {
-    id: 'hist-1',
-    username: 'Administrator',
-    permission: 'Admin Privilege',
-    userType: 'admin',
-    locked: false,
-    startingTime: '8:00 AM',
-    endingTime: '8:45 AM',
-    date: 'Aug 29, 2026',
-    timestamp: Date.now() - 1000 * 60 * 60 * 2,
-    notes: 'Morning routine lab check',
-  },
-  {
-    id: 'hist-2',
-    username: 'Administrator',
-    permission: 'Admin Privilege',
-    userType: 'admin',
-    locked: true,
-    startingTime: '8:45 AM',
-    endingTime: '9:00 AM',
-    date: 'Aug 29, 2026',
-    timestamp: Date.now() - 1000 * 60 * 60 * 1.5,
-    notes: 'Door secured after inspection',
-  },
-  {
-    id: 'hist-3',
-    username: 'User123test',
-    permission: 'Standard User Access',
-    userType: 'user',
-    locked: false,
-    startingTime: '10:05 AM',
-    endingTime: '11:50 AM',
-    date: 'Aug 29, 2026',
-    timestamp: Date.now() - 1000 * 60 * 60 * 1,
-    notes: 'Optics test session',
-  },
-  {
-    id: 'hist-4',
-    username: 'User123test',
-    permission: 'Standard User Access',
-    userType: 'user',
-    locked: true,
-    startingTime: '11:50 AM',
-    endingTime: '12:00 PM',
-    date: 'Aug 29, 2026',
-    timestamp: Date.now() - 1000 * 60 * 45,
-    notes: 'Locked upon departure',
-  },
-  {
-    id: 'hist-5',
-    username: 'Administrator',
-    permission: 'Admin Privilege',
-    userType: 'admin',
-    locked: false,
-    startingTime: '6:12 PM',
-    endingTime: '8:47 PM',
-    date: 'Aug 26, 2026',
-    timestamp: Date.now() - 1000 * 60 * 60 * 72,
-    notes: 'Evening equipment servicing',
-  },
-  {
-    id: 'hist-6',
-    username: 'Administrator',
-    permission: 'Admin Privilege',
-    userType: 'admin',
-    locked: true,
-    startingTime: '8:47 PM',
-    endingTime: '8:55 PM',
-    date: 'Aug 26, 2026',
-    timestamp: Date.now() - 1000 * 60 * 60 * 71,
-    notes: 'Final night lockdown',
-  },
-];
+const defaultHistory: HistoryRecord[] = generateMonthHistory();
 
 const defaultEmergencyAlerts: EmergencyAlert[] = [];
 
@@ -245,7 +225,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
   const [isSimulatorActive, setIsSimulatorActiveState] = useState<boolean>(() => {
     const saved = localStorage.getItem('smartlock_simulator_active');
-    return saved !== null ? saved === 'true' : false;
+    return saved !== null ? saved === 'true' : true;
   });
   const [wsStatus, setWsStatus] = useState<'connected' | 'connecting' | 'disconnected' | 'simulated' | 'error'>(() => {
     const saved = localStorage.getItem('smartlock_simulator_active');
@@ -279,7 +259,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [history, setHistory] = useState<HistoryRecord[]>(() => {
     try {
       const saved = localStorage.getItem('history_record');
-      return saved ? JSON.parse(saved) : defaultHistory;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length >= 15) {
+          return parsed;
+        }
+      }
+      return defaultHistory;
     } catch {
       return defaultHistory;
     }
@@ -331,6 +317,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   });
 
+  // Room Transfer Requests
+  const [roomTransfers, setRoomTransfers] = useState<RoomTransferRequest[]>(() => {
+    try {
+      const saved = localStorage.getItem('room_transfers');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Admin Lock/Unlock Notifications
+  const [adminNotifications, setAdminNotifications] = useState<AdminLockNotification[]>(() => {
+    try {
+      const saved = localStorage.getItem('admin_notifications');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Active room session holder
+  const [activeRoomHolder, setActiveRoomHolder] = useState<string | null>(() => {
+    const saved = localStorage.getItem('active_room_holder');
+    if (saved) return saved;
+    try {
+      const isLocked = localStorage.getItem('locked') === 'true';
+      if (!isLocked) {
+        return 'Administrator';
+      }
+    } catch {}
+    return null;
+  });
+
   // Welcome message banner state
   const [welcomeMessage, setWelcomeMessage] = useState<string | null>(null);
 
@@ -341,6 +360,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     localStorage.setItem('user_data', JSON.stringify(profiles));
   }, [profiles]);
+
+  useEffect(() => {
+    localStorage.setItem('room_transfers', JSON.stringify(roomTransfers));
+  }, [roomTransfers]);
+
+  useEffect(() => {
+    localStorage.setItem('admin_notifications', JSON.stringify(adminNotifications));
+  }, [adminNotifications]);
+
+  useEffect(() => {
+    if (activeRoomHolder) {
+      localStorage.setItem('active_room_holder', activeRoomHolder);
+    } else {
+      localStorage.removeItem('active_room_holder');
+    }
+  }, [activeRoomHolder]);
 
   useEffect(() => {
     if (currentUser) {
@@ -373,6 +408,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     localStorage.setItem('emergency_alerts', JSON.stringify(emergencyAlerts));
   }, [emergencyAlerts]);
+
+  // Proactively prune stale pending room access requests whenever room custody changes or room is locked
+  useEffect(() => {
+    if (activeRoomHolder) {
+      setRoomTransfers((prev) => {
+        const hasStale = prev.some(
+          (t) =>
+            t.status === 'pending' &&
+            ((t.requestType === 'request' && t.toUsername.toLowerCase() !== activeRoomHolder.toLowerCase()) ||
+              (t.requestType === 'transfer' && t.fromUsername.toLowerCase() !== activeRoomHolder.toLowerCase()))
+        );
+        if (hasStale) {
+          return prev.filter(
+            (t) =>
+              t.status !== 'pending' ||
+              (t.requestType === 'request'
+                ? t.toUsername.toLowerCase() === activeRoomHolder.toLowerCase()
+                : t.fromUsername.toLowerCase() === activeRoomHolder.toLowerCase())
+          );
+        }
+        return prev;
+      });
+    } else if (locked) {
+      setRoomTransfers((prev) => {
+        const hasPending = prev.some((t) => t.status === 'pending');
+        return hasPending ? prev.filter((t) => t.status !== 'pending') : prev;
+      });
+    }
+  }, [activeRoomHolder, locked]);
 
   const login = (username: string, password: string): { success: boolean; error?: 'user_not_found' | 'incorrect_password' } => {
     const found = profiles.find((p) => p.username.toLowerCase() === username.trim().toLowerCase());
@@ -556,6 +620,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setHistory((prev) => [newRecord, ...prev]);
+
+    // Add admin notification when a user locks or unlocks the smartlock
+    const actionStr = willBeLocked ? 'locked' : 'unlocked';
+    const actingUser = currentUserRef.current?.username || 'User';
+    const actingRole = currentUserRef.current?.type || 'user';
+    const newAdminNotif: AdminLockNotification = {
+      id: `notif-${Date.now()}`,
+      type: 'lock_state_change',
+      action: willBeLocked ? 'locked' : 'unlocked',
+      username: actingUser,
+      userRole: actingRole,
+      doorName: 'Laboratory SmartLock #1',
+      timestamp: `${currentTime}, ${currentDate}`,
+      timestampMs: Date.now(),
+      read: false,
+    };
+    setAdminNotifications((prev) => [newAdminNotif, ...prev]);
+
+    if (!willBeLocked) {
+      setActiveRoomHolder(actingUser);
+    } else {
+      setActiveRoomHolder(null);
+      // When door is locked, any pending room transfer or access request is invalidated
+      setRoomTransfers((prev) => prev.filter((t) => t.status !== 'pending'));
+    }
+
     setLocked(willBeLocked);
     lockedRef.current = willBeLocked;
     try {
@@ -1096,6 +1186,210 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setRegistrationNotice(null);
   };
 
+  const initiateRoomTransfer = (toUsername: string, notes?: string): { success: boolean; error?: string } => {
+    if (!currentUser) {
+      return { success: false, error: 'You must be logged in to transfer room access.' };
+    }
+    if (currentUser.username.toLowerCase() === toUsername.trim().toLowerCase()) {
+      return { success: false, error: 'Cannot transfer room access to yourself.' };
+    }
+    const targetUser = profiles.find((p) => p.username.toLowerCase() === toUsername.trim().toLowerCase());
+    if (!targetUser) {
+      return { success: false, error: `Target user "${toUsername}" not found.` };
+    }
+
+    const now = new Date();
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
+    let currentTime = '';
+    if (hours < 12) {
+      currentTime = `${hours === 0 ? 12 : hours}:${String(minutes).padStart(2, '0')} AM`;
+    } else if (hours === 12) {
+      currentTime = `12:${String(minutes).padStart(2, '0')} PM`;
+    } else {
+      currentTime = `${hours - 12}:${String(minutes).padStart(2, '0')} PM`;
+    }
+
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const currentDate = `${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
+
+    const newTransfer: RoomTransferRequest = {
+      id: `transfer-${Date.now()}`,
+      requestType: 'transfer',
+      fromUsername: currentUser.username,
+      fromUserRole: currentUser.type,
+      fromPermission: currentUser.permission,
+      toUsername: targetUser.username,
+      doorName: 'Laboratory SmartLock #1',
+      timestamp: `${currentTime}, ${currentDate}`,
+      timestampMs: Date.now(),
+      notes: notes?.trim() || undefined,
+      status: 'pending',
+    };
+
+    setRoomTransfers((prev) => [newTransfer, ...prev]);
+
+    return { success: true };
+  };
+
+  const requestRoomAccess = (notes?: string): { success: boolean; error?: string } => {
+    if (!currentUser) {
+      return { success: false, error: 'You must be logged in to request room access.' };
+    }
+    const currentHolder = activeRoomHolder || (history.find((h) => !h.locked)?.username) || 'Administrator';
+    if (currentUser.username.toLowerCase() === currentHolder.toLowerCase()) {
+      return { success: false, error: 'You are already the active session holder.' };
+    }
+
+    const targetHolderUser = profiles.find((p) => p.username.toLowerCase() === currentHolder.toLowerCase());
+    const targetHolderName = targetHolderUser ? targetHolderUser.username : currentHolder;
+
+    const now = new Date();
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
+    let currentTime = '';
+    if (hours < 12) {
+      currentTime = `${hours === 0 ? 12 : hours}:${String(minutes).padStart(2, '0')} AM`;
+    } else if (hours === 12) {
+      currentTime = `12:${String(minutes).padStart(2, '0')} PM`;
+    } else {
+      currentTime = `${hours - 12}:${String(minutes).padStart(2, '0')} PM`;
+    }
+
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const currentDate = `${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
+
+    const newTransfer: RoomTransferRequest = {
+      id: `request-${Date.now()}`,
+      requestType: 'request',
+      fromUsername: currentUser.username,
+      fromUserRole: currentUser.type,
+      fromPermission: currentUser.permission,
+      toUsername: targetHolderName,
+      doorName: 'Laboratory SmartLock #1',
+      timestamp: `${currentTime}, ${currentDate}`,
+      timestampMs: Date.now(),
+      notes: notes?.trim() || undefined,
+      status: 'pending',
+    };
+
+    setRoomTransfers((prev) => [newTransfer, ...prev]);
+
+    return { success: true };
+  };
+
+  const respondToRoomTransfer = (transferId: string, accept: boolean) => {
+    const transfer = roomTransfers.find((t) => t.id === transferId);
+    if (!transfer) return;
+
+    const now = new Date();
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
+    let currentTime = '';
+    if (hours < 12) {
+      currentTime = `${hours === 0 ? 12 : hours}:${String(minutes).padStart(2, '0')} AM`;
+    } else if (hours === 12) {
+      currentTime = `12:${String(minutes).padStart(2, '0')} PM`;
+    } else {
+      currentTime = `${hours - 12}:${String(minutes).padStart(2, '0')} PM`;
+    }
+
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const currentDate = `${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
+
+    if (accept) {
+      const isAccessRequest = transfer.requestType === 'request';
+      // In a request: session holder (transfer.toUsername) accepts and relinquishes to requester (transfer.fromUsername).
+      // In a transfer: session holder (transfer.fromUsername) offered and recipient (transfer.toUsername) accepts.
+      const relinquishingUsername = isAccessRequest ? transfer.toUsername : transfer.fromUsername;
+      const gainingUsername = isAccessRequest ? transfer.fromUsername : transfer.toUsername;
+
+      // Mark this transfer as accepted and delete ALL other pending requests/transfers for the room
+      // so stale requests (e.g. John's request to Admin when Lily accepts) get deleted immediately
+      setRoomTransfers((prev) =>
+        prev
+          .map((t) =>
+            t.id === transferId
+              ? { ...t, status: 'accepted' as const, resolvedAt: `${currentTime}, ${currentDate}` }
+              : t
+          )
+          .filter((t) => t.id === transferId || t.status !== 'pending')
+      );
+
+      const relinquishingUserObj = profiles.find((p) => p.username.toLowerCase() === relinquishingUsername.toLowerCase()) || (relinquishingUsername === currentUser?.username ? currentUser : undefined);
+      const gainingUserObj = profiles.find((p) => p.username.toLowerCase() === gainingUsername.toLowerCase()) || (gainingUsername === currentUser?.username ? currentUser : undefined);
+
+      const previousTime = history.length > 0 ? history[0].endingTime : '12:00 AM';
+
+      // Record 1: Previous user relinquishing access
+      const relinquishRecord: HistoryRecord = {
+        id: `hist-relinquish-${Date.now()}`,
+        username: relinquishingUsername,
+        permission: relinquishingUserObj?.permission || (relinquishingUserObj?.type === 'admin' ? 'Admin Privilege' : 'Standard User Access'),
+        userType: relinquishingUserObj?.type || 'user',
+        locked: false,
+        startingTime: previousTime,
+        endingTime: currentTime,
+        date: currentDate,
+        timestamp: Date.now() - 50,
+        notes: `Relinquished room access for Laboratory SmartLock #1 (Transferred to ${gainingUsername})${transfer.notes ? ` - Reason: ${transfer.notes}` : ''}`,
+      };
+
+      // Record 2: New user gaining access
+      const gainRecord: HistoryRecord = {
+        id: `hist-gain-${Date.now()}`,
+        username: gainingUsername,
+        permission: gainingUserObj?.permission || (gainingUserObj?.type === 'admin' ? 'Admin Privilege' : 'Standard User Access'),
+        userType: gainingUserObj?.type || 'user',
+        locked: false,
+        startingTime: currentTime,
+        endingTime: currentTime,
+        date: currentDate,
+        timestamp: Date.now(),
+        notes: `Gained room access for Laboratory SmartLock #1 (Transferred from ${relinquishingUsername})`,
+      };
+
+      setHistory((prev) => [gainRecord, relinquishRecord, ...prev]);
+      setActiveRoomHolder(gainingUsername);
+
+      // Notification for admins alerting room transfer handover
+      const adminTransferNotif: AdminLockNotification = {
+        id: `notif-transfer-${Date.now()}`,
+        type: 'lock_state_change',
+        action: 'unlocked',
+        username: gainingUsername,
+        userRole: gainingUserObj?.type || 'user',
+        doorName: 'Laboratory SmartLock #1',
+        timestamp: `${currentTime}, ${currentDate}`,
+        timestampMs: Date.now(),
+        read: false,
+      };
+      setAdminNotifications((prev) => [adminTransferNotif, ...prev]);
+    } else {
+      setRoomTransfers((prev) =>
+        prev.map((t) =>
+          t.id === transferId
+            ? { ...t, status: 'declined' as const, resolvedAt: `${currentTime}, ${currentDate}` }
+            : t
+        )
+      );
+    }
+  };
+
+  const dismissRoomTransfer = (transferId: string) => {
+    setRoomTransfers((prev) => prev.filter((t) => t.id !== transferId));
+  };
+
+  const markAdminNotificationAsRead = (id: string) => {
+    setAdminNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+    );
+  };
+
+  const clearAllAdminNotifications = () => {
+    setAdminNotifications([]);
+  };
+
   // Online active users
   const onlineUsers = profiles.filter((p) => p.isOnline || p.username === currentUser?.username);
 
@@ -1151,6 +1445,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         triggerEmergency,
         resolveEmergency,
         onlineUsers,
+        roomTransfers,
+        adminNotifications,
+        activeRoomHolder,
+        initiateRoomTransfer,
+        requestRoomAccess,
+        respondToRoomTransfer,
+        dismissRoomTransfer,
+        markAdminNotificationAsRead,
+        clearAllAdminNotifications,
       }}
     >
       {children}

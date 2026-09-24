@@ -41,7 +41,7 @@ export interface UserSchedule {
   label: string;
   role: 'admin' | 'user';
   time: string;
-  color: string;
+  color?: string;
   days?: string[];
   startTime?: string;
   endTime?: string;
@@ -77,6 +77,33 @@ export interface EmergencyAlert {
 }
 
 export type TabType = 'lock' | 'history' | 'schedule' | 'settings' | 'users';
+
+export interface RoomTransferRequest {
+  id: string;
+  requestType?: 'transfer' | 'request';
+  fromUsername: string;
+  fromUserRole: 'admin' | 'user';
+  fromPermission?: string;
+  toUsername: string;
+  doorName: string;
+  timestamp: string;
+  timestampMs: number;
+  notes?: string;
+  status: 'pending' | 'accepted' | 'declined';
+  resolvedAt?: string;
+}
+
+export interface AdminLockNotification {
+  id: string;
+  type: 'lock_state_change';
+  action: 'locked' | 'unlocked';
+  username: string;
+  userRole: 'admin' | 'user';
+  doorName: string;
+  timestamp: string;
+  timestampMs: number;
+  read: boolean;
+}
 
 export interface AppSettings {
   language: string;

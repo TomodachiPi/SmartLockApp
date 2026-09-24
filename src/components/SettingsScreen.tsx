@@ -128,6 +128,12 @@ export const SettingsScreen: React.FC = () => {
   } = useApp();
 
   const isAdmin = currentUser?.type === 'admin';
+  const currentUsernameLower = (currentUser?.username || '').toLowerCase();
+  const displayedSchedules = isAdmin
+    ? userSchedules
+    : userSchedules.filter(
+        (s) => s.label.toLowerCase() === currentUsernameLower
+      );
 
   // Modal states
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -565,22 +571,36 @@ export const SettingsScreen: React.FC = () => {
             )}
 
             {/* Schedule Cards List */}
-            <div className="space-y-2.5">
-              {userSchedules.map((sched) => (
-                <ScheduleCard
-                  key={sched.id}
-                  label={sched.label}
-                  role={sched.role}
-                  time={sched.time}
-                  color={sched.color}
-                  days={sched.days}
-                  status={sched.status}
-                  isAdminViewer={isAdmin}
-                  onEdit={isAdmin ? () => handleOpenEditSchedule(sched) : undefined}
-                  onDelete={isAdmin ? () => deleteSchedule(sched.id) : undefined}
-                />
-              ))}
-            </div>
+            {displayedSchedules.length === 0 ? (
+              <div className="bg-[#0f172a] p-4 rounded-xl border border-slate-800 text-center space-y-2">
+                <Clock className="w-5 h-5 text-cyan-400 mx-auto" />
+                <p className="text-xs font-bold text-white">Default Access Schedule Active</p>
+                <p className="text-[11px] text-slate-400 font-mono">
+                  {currentUser?.time
+                    ? `Authorized: ${Math.floor(currentUser.time[0] / 60)}:00 - ${Math.floor(currentUser.time[1] / 60)}:00, Monday to Friday`
+                    : 'Standard hours: 09:00 AM — 05:00 PM, Monday to Friday'}
+                </p>
+                <span className="inline-block text-[10px] font-mono text-cyan-400 bg-cyan-950/60 border border-cyan-500/30 px-2.5 py-0.5 rounded-full">
+                  Standard Clearance
+                </span>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {displayedSchedules.map((sched) => (
+                  <ScheduleCard
+                    key={sched.id}
+                    label={sched.label}
+                    role={sched.role}
+                    time={sched.time}
+                    days={sched.days}
+                    status={sched.status}
+                    isAdminViewer={isAdmin}
+                    onEdit={isAdmin ? () => handleOpenEditSchedule(sched) : undefined}
+                    onDelete={isAdmin ? () => deleteSchedule(sched.id) : undefined}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -715,178 +735,6 @@ export const SettingsScreen: React.FC = () => {
           </div>
         )}
 
-        {(activeSection === 'all' || activeSection === 'system') && (
-          <div id="section-language" className="bg-[#111827] rounded-2xl p-4 border border-slate-800 shadow-md space-y-3">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-              <div className="flex items-center gap-2">
-                <Globe className="w-4 h-4 text-cyan-400" />
-                <div>
-                  <h3 className="text-sm font-bold text-white">App Language Settings</h3>
-                  <p className="text-[10px] text-slate-400">Select language for the app to use</p>
-                </div>
-              </div>
-              <span className="text-xs font-mono font-bold text-cyan-400">
-                {languageOptions.find((l) => l.code === selectedLanguage)?.name}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 pt-1">
-              {languageOptions.map((lang) => {
-                const isSelected = selectedLanguage === lang.code;
-                return (
-                  <button
-                    key={lang.code}
-                    id={`lang-btn-${lang.code}`}
-                    onClick={() => {
-                      setSelectedLanguage(lang.code);
-                      showToast(`Language switched to ${lang.name}`);
-                    }}
-                    className={`p-2.5 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
-                      isSelected
-                        ? 'bg-cyan-500/15 border-cyan-500/60 text-white shadow-[0_0_10px_rgba(6,182,212,0.2)]'
-                        : 'bg-[#0f172a] border-slate-800 text-slate-300 hover:border-slate-700'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-base">{lang.flag}</span>
-                      <div>
-                        <p className="text-xs font-bold">{lang.nativeName}</p>
-                        <p className="text-[10px] text-slate-400 font-mono">{lang.name}</p>
-                      </div>
-                    </div>
-                    {isSelected && <Check className="w-4 h-4 text-cyan-400 shrink-0" />}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {(activeSection === 'all' || activeSection === 'system') && (
-          <div id="section-theme" className="bg-[#111827] rounded-2xl p-4 border border-slate-800 shadow-md space-y-3">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-              <div className="flex items-center gap-2">
-                <Palette className="w-4 h-4 text-cyan-400" />
-                <div>
-                  <h3 className="text-sm font-bold text-white">Display Theme & Palette</h3>
-                  <p className="text-[10px] text-slate-400">Cyber security UI visual themes & glow accents</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-2.5 pt-1">
-              {themeOptions.map((thm) => {
-                const isSelected = selectedTheme === thm.id;
-                return (
-                  <div
-                    key={thm.id}
-                    id={`theme-card-${thm.id}`}
-                    onClick={() => {
-                      setSelectedTheme(thm.id);
-                      showToast(`Theme applied: ${thm.name}`);
-                    }}
-                    className={`p-3 rounded-xl border flex items-center justify-between transition-all cursor-pointer ${
-                      isSelected
-                        ? `bg-[#131d2e] ${thm.colorBorder} shadow-[0_0_15px_rgba(6,182,212,0.2)]`
-                        : 'bg-[#0f172a] border-slate-800 hover:border-slate-700'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`w-6 h-6 rounded-full border-2 border-slate-700 flex items-center justify-center ${thm.bgPreview}`}
-                        style={{ borderColor: thm.accentColor }}
-                      >
-                        <div
-                          className="w-2.5 h-2.5 rounded-full"
-                          style={{ backgroundColor: thm.accentColor }}
-                        />
-                      </div>
-
-                      <div>
-                        <h4 className="text-xs font-bold text-white">{thm.name}</h4>
-                        <p className="text-[10px] text-slate-400">{thm.subtitle}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {isSelected ? (
-                        <span className="text-[10px] font-mono font-bold text-cyan-400 flex items-center gap-1">
-                          <Check className="w-3.5 h-3.5" />
-                          ACTIVE
-                        </span>
-                      ) : (
-                        <span className="text-[10px] font-mono text-slate-500">Select</span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* SECTION 6: NOTIFICATIONS & TELEMETRY ALERTS */}
-        {isAdmin && (activeSection === 'all' || activeSection === 'system') && (
-          <div id="section-notifications" className="bg-[#111827] rounded-2xl p-4 border border-slate-800 shadow-md space-y-3">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-              <div className="flex items-center gap-2">
-                <Bell className="w-4 h-4 text-cyan-400" />
-                <div>
-                  <h3 className="text-sm font-bold text-white">Notifications & Alert Broadcasts</h3>
-                  <p className="text-[10px] text-slate-400">Manage notifications and real-time alert broadcasts</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-3 pt-1 text-xs">
-              <div className="flex items-center justify-between bg-[#0f172a] p-3 rounded-xl border border-slate-800/80">
-                <div>
-                  <span className="font-bold text-white block">SmartLock Locking/Unlocking Alerts</span>
-                  <span className="text-[10px] text-slate-400">Broadcast immediate message upon lock state toggle</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setNotifyLockState(!notifyLockState);
-                    showToast(`Lock state alerts ${!notifyLockState ? 'enabled' : 'disabled'}`);
-                  }}
-                  className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
-                    notifyLockState ? 'bg-cyan-500' : 'bg-slate-800'
-                  }`}
-                >
-                  <span
-                    className={`absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform ${
-                      notifyLockState ? 'translate-x-5' : 'translate-x-0'
-                    }`}
-                  />
-                </button>
-              </div>
-              
-              <div className="flex items-center justify-between bg-[#0f172a] p-3 rounded-xl border border-slate-800/80">
-                <div>
-                  <span className="font-bold text-white block">Low Battery Warning Notification</span>
-                  <span className="text-[10px] text-slate-400">Alert notification when SmartLock battery drops below 20%</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setNotifyLowBattery(!notifyLowBattery);
-                    showToast(`Battery warnings ${!notifyLowBattery ? 'enabled' : 'disabled'}`);
-                  }}
-                  className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
-                    notifyLowBattery ? 'bg-red-500' : 'bg-slate-800'
-                  }`}
-                >
-                  <span
-                    className={`absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform ${
-                      notifyLowBattery ? 'translate-x-5' : 'translate-x-0'
-                    }`}
-                  />
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {isAdmin && (activeSection === 'all' || activeSection === 'system') && (
           <div id="section-hardware" className="bg-[#111827] rounded-2xl p-4 border border-slate-800 shadow-md space-y-3">
@@ -901,38 +749,8 @@ export const SettingsScreen: React.FC = () => {
             </div>
 
             <div className="space-y-3 pt-1 text-xs">
-              {/* Auto-Lock Delay Selector */}
-              <div className="bg-[#0f172a] p-3 rounded-xl border border-slate-800/80 space-y-2">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <span className="font-bold text-white block">SmartLock Auto-Lock Delay</span>
-                    <span className="text-[10px] text-slate-400">Automatically locks the SmartLock after a set amount of time</span>
-                  </div>
-                  <span className="text-xs font-mono font-bold text-cyan-400">{autoLockDelay}</span>
-                </div>
 
-                <div className="grid grid-cols-5 gap-1.5 pt-1">
-                  {['10s', '30s', '60s', '120s', 'Off'].map((delay) => (
-                    <button
-                      key={delay}
-                      type="button"
-                      onClick={() => {
-                        setAutoLockDelay(delay);
-                        showToast(`Auto-lock delay set to ${delay}`);
-                      }}
-                      className={`py-1.5 rounded-lg text-[11px] font-mono font-bold transition-all cursor-pointer ${
-                        autoLockDelay === delay
-                          ? 'bg-cyan-500 text-slate-950 shadow-sm'
-                          : 'bg-[#1e293b] text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      {delay}
-                    </button>
-                  ))}
-                </div>
-              </div>
 
-              {/* IoT Device WebSocket Telemetry Settings */}
               <div className="bg-[#0f172a] p-3 rounded-xl border border-slate-800/80 space-y-3">
                 <div className="flex justify-between items-center">
                   <div className="flex items-center gap-2">
@@ -973,7 +791,6 @@ export const SettingsScreen: React.FC = () => {
           </div>
         )}
 
-        {/* SECTION 8: HARDWARE & OS DIAGNOSTICS */}
         {(activeSection === 'all' || activeSection === 'system') && (
           <div id="section-diagnostics" className="bg-[#090d16] rounded-2xl p-4 border border-slate-800/80 space-y-2 text-[11px] font-mono text-slate-400">
             <div className="flex items-center justify-between text-slate-300 font-bold">

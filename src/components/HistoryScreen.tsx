@@ -29,11 +29,24 @@ export const HistoryScreen: React.FC = () => {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   // Normal User recent visits vs Admin all records
+  // All users, admin or not, can see who relinquished access and who gained access
   const relevantHistory = useMemo(() => {
     if (!isAdmin) {
-      return history.filter(
-        (item) => item.username.toLowerCase() === currentUser?.username.toLowerCase()
-      );
+      return history.filter((item) => {
+        // Own user events
+        if (item.username.toLowerCase() === currentUser?.username.toLowerCase()) {
+          return true;
+        }
+        // Room transfer/handover logs: all users can see who relinquished access and who gained access
+        const notesLower = (item.notes || '').toLowerCase();
+        const isHandoverLog =
+          notesLower.includes('relinquished room access') ||
+          notesLower.includes('gained room access') ||
+          notesLower.includes('relinquished') ||
+          notesLower.includes('gained access');
+
+        return isHandoverLog;
+      });
     }
     return history;
   }, [history, isAdmin, currentUser]);
@@ -86,54 +99,55 @@ export const HistoryScreen: React.FC = () => {
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-lg font-black text-white tracking-tight">
-              {isAdmin ? 'Access Log & Statistics' : 'Recent Visits'}
+              {isAdmin ? 'Access Log & Statistics' : 'Recent Visits & Statistics'}
             </h2>
           </div>
           <p className="text-xs text-slate-400">
-            {isAdmin ? 'SmartLock Acess History and Statistics' : 'SmartLock Acess History and Statistics'}
+            SmartLock Access History and Statistics
           </p>
         </div>
 
-        {isAdmin && (
+        {isAdmin && 
+        <>
           <button
-            id="toggle-analytics-btn"
-            onClick={() => setShowCharts(!showCharts)}
-            className={`text-xs px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-              showCharts
-                ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 shadow-[0_0_12px_rgba(6,182,212,0.3)]'
-                : 'bg-[#111827] text-cyan-400 border border-cyan-500/30 hover:bg-[#1e293b]'
-            }`}
-          >
-            <BarChart2 className="w-3.5 h-3.5" />
+          id="toggle-analytics-btn"
+          onClick={() => setShowCharts(!showCharts)}
+          className={`text-xs px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+            showCharts
+              ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 shadow-[0_0_12px_rgba(6,182,212,0.3)]'
+              : 'bg-[#111827] text-cyan-400 border border-cyan-500/30 hover:bg-[#1e293b]'
+          }`}
+        >
+          <BarChart2 className="w-3.5 h-3.5" />
             {showCharts ? 'Hide Visuals' : 'View Analytics'}
           </button>
-        )}
+        </>}
       </div>
 
       <div className="px-4 space-y-4">
 
-      {/* Admin Analytics Charts Section */}
-      {isAdmin && showCharts && <AnalyticsCharts />}
-
-      {/* Stats Summary Cards */}
-      <div className="grid grid-cols-3 gap-2.5">
-        <div className="bg-[#111827] p-3 rounded-2xl border border-slate-800 text-center">
-          <p className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Total Events</p>
-          <p className="text-xl font-black font-mono text-white mt-0.5">{relevantHistory.length}</p>
+      {isAdmin && showCharts && 
+      <>
+        <AnalyticsCharts records={relevantHistory} />
+        <div className="grid grid-cols-3 gap-2.5">
+          <div className="bg-[#111827] p-3 rounded-2xl border border-slate-800 text-center">
+            <p className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Total Events</p>
+            <p className="text-xl font-black font-mono text-white mt-0.5">{relevantHistory.length}</p>
+          </div>
+          <div className="bg-[#111827] p-3 rounded-2xl border border-slate-800 text-center">
+            <p className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Locks</p>
+            <p className="text-xl font-black font-mono text-red-400 mt-0.5">
+              {relevantHistory.filter((h) => h.locked && !h.isEmergencyOverride).length}
+            </p>
+          </div>
+          <div className="bg-[#111827] p-3 rounded-2xl border border-slate-800 text-center">
+            <p className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Unlocks</p>
+            <p className="text-xl font-black font-mono text-emerald-400 mt-0.5">
+              {relevantHistory.filter((h) => !h.locked && !h.isEmergencyOverride).length}
+            </p>
+          </div>
         </div>
-        <div className="bg-[#111827] p-3 rounded-2xl border border-slate-800 text-center">
-          <p className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Locks</p>
-          <p className="text-xl font-black font-mono text-red-400 mt-0.5">
-            {relevantHistory.filter((h) => h.locked && !h.isEmergencyOverride).length}
-          </p>
-        </div>
-        <div className="bg-[#111827] p-3 rounded-2xl border border-slate-800 text-center">
-          <p className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Unlocks</p>
-          <p className="text-xl font-black font-mono text-emerald-400 mt-0.5">
-            {relevantHistory.filter((h) => !h.locked && !h.isEmergencyOverride).length}
-          </p>
-        </div>
-      </div>
+      </>}
 
       {/* Global Search & Filter Controls */}
       <div className="bg-[#111827] rounded-2xl p-3.5 border border-slate-800 space-y-3 shadow-md">

@@ -96,7 +96,7 @@ export const AuthScreen: React.FC = () => {
           />
         </div>
         <h1 className="text-4xl font-black text-white tracking-tight">SmartLock</h1>
-        <p className="text-sm font-mono text-cyan-400 mt-1">Created by Group [NUMBER]</p>
+        <p className="text-sm font-mono text-cyan-400 mt-1">Created by Group No. 1</p>
         <p className="text-xs font-mono text-slate-400 mt-0.5">
           It is currently {formattedTime}
         </p>
