@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { DoorSelectModal } from './DoorSelectModal';
 import {
@@ -17,7 +17,7 @@ import {
 import padlock_png from "./../assets/images/padlock.png";
 
 export const AuthScreen: React.FC = () => {
-  const { login, registerRequest, registrationNotice, dismissRegistrationNotice, locked } = useApp();
+  const { login, registerRequest, registrationNotice, dismissRegistrationNotice, locked, syncAuthData } = useApp();
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -29,6 +29,15 @@ export const AuthScreen: React.FC = () => {
   const [showIncorrectUsername, setShowIncorrectUsername] = useState(false);
   const [showIncorrectPassword, setShowIncorrectPassword] = useState(false);
   const [showUsernameTaken, setShowUsernameTaken] = useState(false);
+
+  // Sync user credentials and requests with ESP8266 continuously while on AuthScreen
+  useEffect(() => {
+    syncAuthData();
+    const interval = setInterval(() => {
+      syncAuthData();
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [syncAuthData]);
 
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,6 +51,7 @@ export const AuthScreen: React.FC = () => {
 
     const res = login(username, password);
     if (!res.success) {
+      syncAuthData();
       if (res.error === 'user_not_found') {
         setShowIncorrectUsername(true);
       } else if (res.error === 'incorrect_password') {

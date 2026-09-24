@@ -35,6 +35,7 @@ export const IoTWebSocketModal: React.FC<IoTWebSocketModalProps> = ({ isOpen, on
     sendCustomWsMessage,
     toggleLock,
     changing,
+    lockOperation,
     locked,
     lockProgress,
     remainingLockTime,
@@ -133,7 +134,13 @@ export const IoTWebSocketModal: React.FC<IoTWebSocketModalProps> = ({ isOpen, on
               <div className="bg-[#090d16] p-2.5 rounded-lg border border-slate-800">
                 <span className="text-[18px] text-slate-400 block">Current Status</span>
                 <span className={`text-[16px] font-bold ${locked ? 'text-red-400' : 'text-emerald-400'}`}>
-                  {changing ? (locked ? 'UNLOCKING...' : 'LOCKING...') : locked ? 'LOCKED' : 'UNLOCKED'}
+                  {changing
+                    ? (lockOperation === 'unlocking' || (lockOperation === 'idle' && locked)
+                        ? 'UNLOCKING...'
+                        : 'LOCKING...')
+                    : locked
+                    ? 'LOCKED'
+                    : 'UNLOCKED'}
                 </span>
               </div>
               <div className="bg-[#090d16] p-2.5 rounded-lg border border-slate-800">
@@ -230,6 +237,13 @@ export const IoTWebSocketModal: React.FC<IoTWebSocketModalProps> = ({ isOpen, on
             {/* Presets */}
             <div className="flex flex-wrap gap-1.5 pt-1">
               <span className="text-[10px] font-mono text-slate-500 self-center">e.g.:</span>
+              <button
+                type="button"
+                onClick={() => setInputUrl((window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + '/ws')}
+                className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-900/40 text-cyan-300 border border-cyan-700/50 hover:bg-cyan-800/50 transition cursor-pointer"
+              >
+                App Server /ws (Sync)
+              </button>
               <button
                 type="button"
                 onClick={() => setInputUrl('ws://192.168.4.1/ws')}

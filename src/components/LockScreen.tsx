@@ -36,6 +36,7 @@ export const LockScreen: React.FC = () => {
     currentUser,
     locked,
     changing,
+    lockOperation,
     toggleLock,
     userSchedules,
     lockProgress,
@@ -455,21 +456,21 @@ export const LockScreen: React.FC = () => {
 
                 <span
                   className={`text-base font-mono font-black mt-2 tracking-widest ${
-                    !canAccessLock
+                    changing
+                      ? (lockOperation === 'unlocking' || (lockOperation === 'idle' && locked)
+                          ? 'text-emerald-400'
+                          : 'text-red-400')
+                      : !canAccessLock
                       ? 'text-slate-500'
                       : locked
                       ? 'text-red-400'
                       : 'text-emerald-400'
                   }`}
                 >
-                  {!canAccessLock
-                    ? locked
-                      ? 'LOCKED'
-                      : 'UNLOCKED'
-                    : changing
-                    ? locked
-                      ? 'UNLOCKING...'
-                      : 'LOCKING...'
+                  {changing
+                    ? (lockOperation === 'unlocking' || (lockOperation === 'idle' && locked)
+                        ? 'UNLOCKING...'
+                        : 'LOCKING...')
                     : locked
                     ? 'LOCKED'
                     : 'UNLOCKED'}
