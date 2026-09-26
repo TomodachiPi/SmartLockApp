@@ -38,6 +38,20 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
   const [selectedPhoto, setSelectedPhoto] = useState(currentUser?.avatarUrl || '');
   const [photoSuccess, setPhotoSuccess] = useState(false);
 
+  // Keep state in sync whenever modal opens or current user avatar changes
+  React.useEffect(() => {
+    if (isOpen) {
+      setActiveTab(defaultTab);
+      setSelectedPhoto(currentUser?.avatarUrl || '');
+      setPasswordError('');
+      setPasswordSuccess(false);
+      setPhotoSuccess(false);
+      setOldPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    }
+  }, [isOpen, defaultTab, currentUser?.avatarUrl]);
+
   if (!isOpen) return null;
 
   const handlePasswordSubmit = (e: React.FormEvent) => {
@@ -66,35 +80,60 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
   };
 
   const compressImage = (dataUrl: string, callback: (compressed: string) => void) => {
+    if (!dataUrl || !dataUrl.startsWith('data:')) {
+      callback(dataUrl);
+      return;
+    }
+
     const img = new Image();
     img.onload = () => {
-      const maxDim = 80;
-      let width = img.width;
-      let height = img.height;
-      if (width > height) {
-        if (width > maxDim) {
-          height = Math.round((height * maxDim) / width);
-          width = maxDim;
+      try {
+        const maxDim = 256;
+        let width = img.naturalWidth || img.width || maxDim;
+        let height = img.naturalHeight || img.height || maxDim;
+        if (width <= 0 || height <= 0) {
+          callback(dataUrl);
+          return;
         }
-      } else {
-        if (height > maxDim) {
-          width = Math.round((width * maxDim) / height);
-          height = maxDim;
+
+        if (width > height) {
+          if (width > maxDim) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          }
+        } else {
+          if (height > maxDim) {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
         }
-      }
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(img, 0, 0, width, height);
-        const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.75);
-        callback(compressedDataUrl);
-      } else {
+
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, width);
+        canvas.height = Math.max(1, height);
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+          if (compressedDataUrl && compressedDataUrl.length > 30 && compressedDataUrl !== 'data:,') {
+            callback(compressedDataUrl);
+          } else {
+            callback(dataUrl);
+          }
+        } else {
+          callback(dataUrl);
+        }
+      } catch (err) {
+        console.warn('[SmartLock] Image compression error, using original', err);
         callback(dataUrl);
       }
     };
-    img.onerror = () => callback(dataUrl);
+    img.onerror = () => {
+      console.warn('[SmartLock] Image load failed in compressor, fallback to original');
+      callback(dataUrl);
+    };
     img.src = dataUrl;
   };
 
@@ -106,6 +145,9 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
         if (typeof reader.result === 'string') {
           compressImage(reader.result, (compressed) => {
             setSelectedPhoto(compressed);
+            // Automatically save to app state and backend on upload
+            updateAvatar(compressed);
+            setPhotoSuccess(true);
           });
         }
       };
@@ -115,14 +157,12 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
 
   const handleSavePhoto = () => {
     if (!selectedPhoto) return;
-    compressImage(selectedPhoto, (finalPhoto) => {
-      updateAvatar(finalPhoto);
-      setPhotoSuccess(true);
-      setTimeout(() => {
-        setPhotoSuccess(false);
-        onClose();
-      }, 1200);
-    });
+    updateAvatar(selectedPhoto);
+    setPhotoSuccess(true);
+    setTimeout(() => {
+      setPhotoSuccess(false);
+      onClose();
+    }, 800);
   };
 
   return (
@@ -255,8 +295,12 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
             <div className="flex flex-col items-center justify-center space-y-2">
               <div className="relative">
                 <img
-                  src={selectedPhoto || user_png}
+                  src={selectedPhoto || currentUser?.avatarUrl || user_png}
                   alt="Profile Photo Preview"
+                  onError={(e) => {
+                    e.currentTarget.onerror = null;
+                    e.currentTarget.src = user_png;
+                  }}
                   className="w-20 h-20 rounded-full object-cover border-2 border-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.3)]"
                 />
               </div>

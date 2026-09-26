@@ -667,15 +667,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const cleanProfiles = parsed.profiles.filter(
           (p: any) => p.username !== 'Sarah_Chen' && p.username !== 'Alex_Rivera'
         );
+        const currentActiveUsername = currentUserRef.current?.username.toLowerCase();
+
+        const isCustomAvatar = (url?: string) =>
+          url &&
+          url !== '/images/user.png' &&
+          url !== 'test-url' &&
+          url !== 'data:,' &&
+          url.length > 20;
+
         setProfiles((prevProfiles) => {
           return cleanProfiles.map((incProf: Profile) => {
             const localProf = prevProfiles.find(
               (lp) => lp.username.toLowerCase() === incProf.username.toLowerCase()
             );
-            const avatarUrl =
-              incProf.avatarUrl && incProf.avatarUrl !== '/images/user.png'
-                ? incProf.avatarUrl
-                : localProf?.avatarUrl || incProf.avatarUrl || user_png;
+
+            let avatarUrl = incProf.avatarUrl;
+            if (isCustomAvatar(incProf.avatarUrl)) {
+              avatarUrl = incProf.avatarUrl;
+            } else if (isCustomAvatar(localProf?.avatarUrl)) {
+              avatarUrl = localProf!.avatarUrl;
+            } else if (
+              currentActiveUsername === incProf.username.toLowerCase() &&
+              isCustomAvatar(currentUserRef.current?.avatarUrl)
+            ) {
+              avatarUrl = currentUserRef.current!.avatarUrl;
+            } else {
+              avatarUrl = incProf.avatarUrl || user_png;
+            }
 
             return {
               ...incProf,
@@ -684,12 +703,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           });
         });
 
-        // Also update currentUser avatar if it matches
+        // Also update currentUser avatar if incoming from server has a newly updated valid avatar
         if (currentUserRef.current) {
           const match = cleanProfiles.find(
-            (p: Profile) => p.username.toLowerCase() === currentUserRef.current?.username.toLowerCase()
+            (p: Profile) => p.username.toLowerCase() === currentActiveUsername
           );
-          if (match && match.avatarUrl && match.avatarUrl !== '/images/user.png' && match.avatarUrl !== currentUserRef.current.avatarUrl) {
+          if (
+            match &&
+            isCustomAvatar(match.avatarUrl) &&
+            match.avatarUrl !== currentUserRef.current.avatarUrl
+          ) {
             setCurrentUser((prev) => {
               if (!prev) return prev;
               const updated = { ...prev, avatarUrl: match.avatarUrl };
@@ -802,10 +825,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             if (prev.some((p) => p.username.toLowerCase() === payload.username.toLowerCase())) return prev;
             return [...prev, payload];
           });
-        } else if (action === 'update' && payload) {
+        } else if ((action === 'update' || action === 'update_avatar') && payload) {
+          const uName = (payload.username || parsed.username || '').toLowerCase();
+          const avUrl = payload.avatarUrl || parsed.avatarUrl;
           setProfiles((prev) =>
-            prev.map((p) => (p.username.toLowerCase() === payload.username.toLowerCase() ? { ...p, ...payload } : p))
+            prev.map((p) =>
+              p.username.toLowerCase() === uName
+                ? { ...p, ...payload, avatarUrl: (avUrl && avUrl.length > 20 && avUrl !== 'data:,' ? avUrl : p.avatarUrl) }
+                : p
+            )
           );
+          if (
+            currentUserRef.current?.username.toLowerCase() === uName &&
+            avUrl &&
+            avUrl.length > 20 &&
+            avUrl !== 'data:,'
+          ) {
+            setCurrentUser((prev) => {
+              if (!prev) return prev;
+              const updated = { ...prev, avatarUrl: avUrl };
+              try {
+                localStorage.setItem('current_user', JSON.stringify(updated));
+              } catch {}
+              return updated;
+            });
+          }
         } else if (action === 'delete' && payload) {
           const uName = (payload.username || '').toLowerCase();
           if (uName) {
@@ -1360,23 +1404,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const login = (username: string, password: string): { success: boolean; error?: 'user_not_found' | 'incorrect_password' } => {
     let found = profiles.find((p) => p.username.toLowerCase() === username.trim().toLowerCase());
     
-    // Check localStorage in case another tab or process synced profiles
-    if (!found) {
-      try {
-        const saved = localStorage.getItem('user_data');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed)) {
-            found = parsed.find((p: any) => p.username.toLowerCase() === username.trim().toLowerCase());
+    // Check localStorage in case another tab or process synced profiles or saved a custom avatar
+    const isCustomAvatar = (url?: string) =>
+      url &&
+      url !== '/images/user.png' &&
+      url !== 'test-url' &&
+      url !== 'data:,' &&
+      url.length > 20;
+
+    let savedAvatarUrl: string | undefined;
+    try {
+      const savedUserStr = localStorage.getItem('current_user');
+      if (savedUserStr) {
+        const parsed = JSON.parse(savedUserStr);
+        if (parsed?.username?.toLowerCase() === username.trim().toLowerCase() && isCustomAvatar(parsed.avatarUrl)) {
+          savedAvatarUrl = parsed.avatarUrl;
+        }
+      }
+      const saved = localStorage.getItem('user_data');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          const fromUserData = parsed.find((p: any) => p.username.toLowerCase() === username.trim().toLowerCase());
+          if (!found) found = fromUserData;
+          if (!savedAvatarUrl && isCustomAvatar(fromUserData?.avatarUrl)) {
+            savedAvatarUrl = fromUserData.avatarUrl;
           }
         }
-      } catch {}
-    }
+      }
+    } catch {}
 
     if (!found) return { success: false, error: 'user_not_found' };
     if (found.password !== password) return { success: false, error: 'incorrect_password' };
 
-    const updatedUser: Profile = { ...found, isOnline: true, lastActive: 'Active now' };
+    const effectiveAvatar = savedAvatarUrl || (isCustomAvatar(found.avatarUrl) ? found.avatarUrl : (found.avatarUrl || user_png));
+
+    const updatedUser: Profile = { ...found, avatarUrl: effectiveAvatar, isOnline: true, lastActive: 'Active now' };
     setProfiles((prev) => {
       const exists = prev.some((p) => p.username.toLowerCase() === found!.username.toLowerCase());
       if (exists) {
@@ -1385,6 +1448,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return [...prev, updatedUser];
     });
     setCurrentUser(updatedUser);
+    try {
+      localStorage.setItem('current_user', JSON.stringify(updatedUser));
+    } catch {}
     setActiveTab('lock');
     setWelcomeMessage(`Welcome, ${updatedUser.username}! — The SmartLock Unit is ready.`);
 
@@ -1509,7 +1575,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateAvatar = (avatarUrl: string) => {
     if (!currentUser) return;
+    if (!avatarUrl || avatarUrl === 'data:,' || avatarUrl.length < 15) {
+      console.warn('[SmartLock] Attempted to update avatar with invalid or empty data URL, ignoring.');
+      return;
+    }
+
     const updatedUser = { ...currentUser, avatarUrl };
+    currentUserRef.current = updatedUser;
     setCurrentUser(updatedUser);
     setProfiles((prev) =>
       prev.map((p) =>

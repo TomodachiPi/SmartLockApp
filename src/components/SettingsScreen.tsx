@@ -289,6 +289,10 @@ export const SettingsScreen: React.FC = () => {
                   <img
                     src={currentUser?.avatarUrl || user_png}
                     alt="Profile Avatar"
+                    onError={(e) => {
+                      e.currentTarget.onerror = null;
+                      e.currentTarget.src = user_png;
+                    }}
                     className="w-16 h-16 rounded-full object-cover border-2 border-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.3)]"
                   />
                   <button
@@ -444,6 +448,10 @@ export const SettingsScreen: React.FC = () => {
                             <img
                               src={profile.avatarUrl || user_png}
                               alt={profile.username}
+                              onError={(e) => {
+                                e.currentTarget.onerror = null;
+                                e.currentTarget.src = user_png;
+                              }}
                               className="w-10 h-10 rounded-full object-cover border border-slate-700 group-hover:border-cyan-400/80 transition-colors"
                             />
                             {profile.isOnline && (
@@ -715,6 +723,10 @@ export const SettingsScreen: React.FC = () => {
                       <img
                         src={p.avatarUrl || user_png}
                         alt={p.username}
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = user_png;
+                        }}
                         className="w-7 h-7 rounded-full object-cover border border-slate-600"
                       />
                       <span

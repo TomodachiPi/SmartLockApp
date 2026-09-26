@@ -271,6 +271,10 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
               <img
                 src={customAvatarInput || avatarUrl}
                 alt="Profile Photo Preview"
+                onError={(e) => {
+                  e.currentTarget.onerror = null;
+                  e.currentTarget.src = user_png;
+                }}
                 className="w-14 h-14 rounded-full object-cover border-2 border-cyan-400 shadow-md shrink-0"
               />
               <div className="flex-1 space-y-2">

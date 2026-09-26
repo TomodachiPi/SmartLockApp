@@ -492,13 +492,14 @@ wss.on('connection', (ws) => {
             } else if (action === 'update_avatar' || action === 'update') {
               const uName = (payload?.username || parsed.username || '').toLowerCase();
               const avUrl = payload?.avatarUrl || parsed.avatarUrl;
+              const isAvatarValid = avUrl && avUrl !== 'data:,' && avUrl !== 'test-url' && avUrl.length > 15;
               if (uName) {
                 profiles = profiles.map((p) => {
                   if (p.username.toLowerCase() === uName) {
                     return {
                       ...p,
                       ...(payload || {}),
-                      avatarUrl: avUrl || payload?.avatarUrl || p.avatarUrl || '/images/user.png',
+                      avatarUrl: isAvatarValid ? avUrl : (p.avatarUrl || '/images/user.png'),
                     };
                   }
                   return p;
@@ -655,8 +656,8 @@ app.get('/api/profiles', (_req, res) => {
 
 app.post('/api/profiles/avatar', (req, res) => {
   const { username, avatarUrl } = req.body;
-  if (!username || !avatarUrl) {
-    res.status(400).json({ error: 'Missing username or avatarUrl' });
+  if (!username || !avatarUrl || avatarUrl === 'data:,' || avatarUrl === 'test-url' || avatarUrl.length < 15) {
+    res.status(400).json({ error: 'Missing or invalid avatarUrl' });
     return;
   }
 

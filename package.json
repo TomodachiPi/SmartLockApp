@@ -18,6 +18,7 @@
     "react-dom": "^18.3.1",
     "recharts": "^3.10.1",
     "tailwind-merge": "^3.0.2",
+    "tsx": "^4.23.15",
     "ws": "^8.21.3"
   },
   "devDependencies": {
@@ -28,7 +29,6 @@
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^4.3.4",
     "tailwindcss": "^4.0.0",
-    "tsx": "^4.23.15",
     "typescript": "~5.7.2",
     "vite": "^6.4.3",
     "vite-plugin-compression2": "^2.5.3",

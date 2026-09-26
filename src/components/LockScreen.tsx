@@ -10,6 +10,7 @@ import { RequestAccessModal } from './RequestAccessModal';
 import { RoomTransferNotificationBanner } from './RoomTransferNotificationBanner';
 import { AdminNotificationBanner } from './AdminNotificationBanner';
 import { NotificationsCenterModal } from './NotificationsCenterModal';
+import { ProfileEditModal } from './ProfileEditModal';
 import {
   AlertTriangle,
   Shield,
@@ -58,6 +59,7 @@ export const LockScreen: React.FC = () => {
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
   const [isNotificationsModalOpen, setIsNotificationsModalOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   const username = currentUser?.username || 'Administrator';
   const isAdmin = currentUser?.type === 'admin';
@@ -129,14 +131,23 @@ export const LockScreen: React.FC = () => {
     <div id="lock-screen" className="flex flex-col w-full pb-8 space-y-4">
       <div className="sticky top-0 z-30 flex items-center justify-between px-4 pt-3 pb-3 border-b border-slate-800/80 bg-[#090d16]/95 backdrop-blur-xl shadow-lg">
         <div className="flex items-center gap-3">
-          <div className="relative">
+          <button
+            type="button"
+            onClick={() => setIsProfileModalOpen(true)}
+            className="relative group cursor-pointer focus:outline-none"
+            title="Edit profile photo"
+          >
             <img
               src={currentUser?.avatarUrl || user_png}
               alt="User Avatar"
-              className="w-11 h-11 rounded-full object-cover border-2 border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.35)]"
+              onError={(e) => {
+                e.currentTarget.onerror = null;
+                e.currentTarget.src = user_png;
+              }}
+              className="w-11 h-11 rounded-full object-cover border-2 border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.35)] transition-transform group-hover:scale-105"
             />
             <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-400 border-2 border-[#0b0f19] shadow-[0_0_8px_#10b981]" />
-          </div>
+          </button>
           <div>
             <p className="text-[11px] font-mono text-slate-400">{greeting}</p>
             <div className="flex items-center gap-2">
@@ -582,6 +593,12 @@ export const LockScreen: React.FC = () => {
       <NotificationsCenterModal
         isOpen={isNotificationsModalOpen}
         onClose={() => setIsNotificationsModalOpen(false)}
+      />
+
+      <ProfileEditModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        defaultTab="photo"
       />
     </div>
   );
