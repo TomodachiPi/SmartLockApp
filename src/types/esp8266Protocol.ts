@@ -42,6 +42,13 @@ export type ClientMessage =
   | {
       type: 'POLL_REQUEST';
       client: string;
+      username?: string;
+      timestamp: number;
+    }
+  | {
+      type: 'USER_PRESENCE';
+      username: string;
+      status: 'online' | 'offline';
       timestamp: number;
     }
   | {

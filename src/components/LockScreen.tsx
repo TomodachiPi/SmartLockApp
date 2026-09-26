@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useApp } from '../context/AppContext';
+import { useApp, isUserScheduleActiveNow } from '../context/AppContext';
 import { AccessCard } from './AccessCard';
 import { WelcomeBanner } from './WelcomeBanner';
 import { EmergencyBanner } from './EmergencyBanner';
@@ -102,144 +102,8 @@ export const LockScreen: React.FC = () => {
     (s) => s.label.toLowerCase() === currentUser?.username.toLowerCase()
   );
 
-  const isScheduleActiveNow = (schedule?: {
-    time?: string;
-    days?: string[];
-    startTime?: string;
-    endTime?: string;
-    role?: string;
-    status?: 'active' | 'restricted';
-  }): boolean => {
-    if (!schedule) return false;
-    if (schedule.status === 'restricted') return false;
-
-    const now = new Date();
-    const dayNamesShort = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const dayNamesFull = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const dayIdx = now.getDay();
-    const currentShort = dayNamesShort[dayIdx];
-    const currentFull = dayNamesFull[dayIdx];
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
-    const timeStr = (schedule.time || '').toLowerCase();
-    const is24_7 = timeStr.includes('24/7') || timeStr.includes('any time') || timeStr.includes('unlimited access');
-
-    // 1. Day Check
-    let dayMatches = false;
-    if (schedule.days && schedule.days.length > 0) {
-      dayMatches = schedule.days.some((d) => {
-        const dClean = d.trim().toLowerCase();
-        if (dClean === currentShort.toLowerCase() || dClean === currentFull.toLowerCase()) return true;
-        if (dClean.startsWith(currentShort.toLowerCase())) return true;
-        if (dClean === 'all' || dClean.includes('all days') || dClean.includes('everyday')) return true;
-        if (dClean.includes('weekday') && dayIdx >= 1 && dayIdx <= 5) return true;
-        if (dClean.includes('weekend') && (dayIdx === 0 || dayIdx === 6)) return true;
-        return false;
-      });
-    } else {
-      // Parse days from timeStr
-      if (
-        timeStr.includes('monday to sunday') ||
-        timeStr.includes('mon-sun') ||
-        timeStr.includes('all days') ||
-        timeStr.includes('daily') ||
-        timeStr.includes('everyday')
-      ) {
-        dayMatches = true;
-      } else if (
-        (timeStr.includes('mon-fri') ||
-          timeStr.includes('monday to friday') ||
-          timeStr.includes('weekdays')) &&
-        dayIdx >= 1 &&
-        dayIdx <= 5
-      ) {
-        dayMatches = true;
-      } else if (
-        (timeStr.includes('weekends') || timeStr.includes('sat-sun') || timeStr.includes('sat & sun')) &&
-        (dayIdx === 0 || dayIdx === 6)
-      ) {
-        dayMatches = true;
-      } else if (
-        timeStr.includes(currentFull.toLowerCase()) ||
-        timeStr.includes(currentShort.toLowerCase())
-      ) {
-        dayMatches = true;
-      } else {
-        const mentionsOtherDays = dayNamesFull.some(
-          (fullDay, idx) =>
-            idx !== dayIdx &&
-            (timeStr.includes(fullDay.toLowerCase()) || timeStr.includes(dayNamesShort[idx].toLowerCase()))
-        );
-        if (mentionsOtherDays) {
-          dayMatches = false;
-        } else {
-          dayMatches = schedule.role === 'admin' || (dayIdx >= 1 && dayIdx <= 5);
-        }
-      }
-    }
-
-    if (!dayMatches) return false;
-
-    // 2. Time Check
-    if (is24_7) return true;
-
-    const parseTimeStr = (tStr: string): number | null => {
-      if (!tStr) return null;
-      const match = tStr.trim().match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?/i);
-      if (!match) return null;
-      let h = parseInt(match[1], 10);
-      const m = match[2] ? parseInt(match[2], 10) : 0;
-      const ampm = match[3] ? match[3].toUpperCase() : null;
-      if (ampm === 'PM' && h < 12) h += 12;
-      if (ampm === 'AM' && h === 12) h = 0;
-      return h * 60 + m;
-    };
-
-    let startM: number | null = null;
-    let endM: number | null = null;
-
-    if (schedule.startTime && schedule.endTime) {
-      startM = parseTimeStr(schedule.startTime);
-      endM = parseTimeStr(schedule.endTime);
-    } else if (schedule.time) {
-      const rangeMatch = schedule.time.match(
-        /(\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)\s*(?:to|-)\s*(\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)/i
-      );
-      if (rangeMatch) {
-        startM = parseTimeStr(rangeMatch[1]);
-        endM = parseTimeStr(rangeMatch[2]);
-      }
-    }
-
-    if (startM !== null && endM !== null) {
-      if (endM >= startM) {
-        return currentMinutes >= startM && currentMinutes <= endM;
-      } else {
-        // Overnight schedule
-        return currentMinutes >= startM || currentMinutes <= endM;
-      }
-    }
-
-    return true;
-  };
-
   // Check if current user can lock/unlock the lock during the current day and time based on their access schedule
-  const canAccessLock = (() => {
-    if (mySchedules.length > 0) {
-      return mySchedules.some((sched) => isScheduleActiveNow(sched));
-    }
-    // If admin has no explicit schedule entries, default to 24/7 master clearance
-    if (isAdmin) return true;
-    // If regular user has profile.time defined [startMin, endMin]
-    if (currentUser?.time && currentUser.time.length === 2) {
-      const now = new Date();
-      const currentDay = now.getDay();
-      const isWeekday = currentDay >= 1 && currentDay <= 5;
-      const currentM = now.getHours() * 60 + now.getMinutes();
-      return isWeekday && currentM >= currentUser.time[0] && currentM <= currentUser.time[1];
-    }
-    return false;
-  })();
+  const canAccessLock = isAdmin ? true : isUserScheduleActiveNow(currentUser, userSchedules);
 
   useEffect(() => {
     const updateGreetingAndTime = () => {
@@ -676,7 +540,7 @@ export const LockScreen: React.FC = () => {
                 endingTime={sched.endTime || (isAdmin ? '11:59 PM' : '05:00 PM')}
                 date={sched.time || (isAdmin ? 'Monday to Sunday' : 'Monday to Friday')}
                 days={sched.days || (isAdmin ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'])}
-                isCurrentlyAuthorized={isScheduleActiveNow(sched)}
+                isCurrentlyAuthorized={isAdmin ? true : isUserScheduleActiveNow(currentUser, [sched])}
               />
             ))}
           </div>
@@ -689,7 +553,7 @@ export const LockScreen: React.FC = () => {
             endingTime={isAdmin ? '11:59 PM' : mySchedule?.endTime || '05:00 PM'}
             date={isAdmin ? 'Monday to Sunday' : mySchedule?.time || 'Monday to Friday'}
             days={isAdmin ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] : mySchedule?.days || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']}
-            isCurrentlyAuthorized={isAdmin ? true : isScheduleActiveNow(mySchedule)}
+            isCurrentlyAuthorized={isAdmin ? true : mySchedule ? isUserScheduleActiveNow(currentUser, [mySchedule]) : false}
           />
         )}
       </div>

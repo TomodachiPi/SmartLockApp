@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useApp } from '../context/AppContext';
+import React, { useState, useEffect } from 'react';
+import { useApp, isUserScheduleActiveNow } from '../context/AppContext';
 import {
   ArrowRightLeft,
   X,
@@ -10,6 +10,7 @@ import {
   KeyRound,
   AlertCircle,
   Sparkles,
+  Ban,
 } from 'lucide-react';
 import user_png from '../assets/images/user.png';
 
@@ -19,18 +20,27 @@ interface TransferAccessModalProps {
 }
 
 export const TransferAccessModal: React.FC<TransferAccessModalProps> = ({ isOpen, onClose }) => {
-  const { currentUser, profiles, initiateRoomTransfer } = useApp();
+  const { currentUser, profiles, userSchedules, initiateRoomTransfer } = useApp();
 
   const eligibleUsers = profiles.filter(
     (p) => p.username.toLowerCase() !== currentUser?.username.toLowerCase()
   );
 
-  const [selectedUsername, setSelectedUsername] = useState<string>(
-    eligibleUsers.length > 0 ? eligibleUsers[0].username : ''
-  );
+  const [selectedUsername, setSelectedUsername] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Default to first user who is currently allowed to lock/unlock the room
+  useEffect(() => {
+    if (isOpen) {
+      const firstAllowed = eligibleUsers.find((u) => isUserScheduleActiveNow(u, userSchedules));
+      setSelectedUsername(firstAllowed ? firstAllowed.username : '');
+      setErrorMessage(null);
+      setIsSuccess(false);
+      setNotes('');
+    }
+  }, [isOpen, profiles, userSchedules]);
 
   if (!isOpen) return null;
 
@@ -46,7 +56,13 @@ export const TransferAccessModal: React.FC<TransferAccessModalProps> = ({ isOpen
     setErrorMessage(null);
 
     if (!selectedUsername) {
-      setErrorMessage('Please choose a recipient user to transfer room access to.');
+      setErrorMessage('Please choose an authorized recipient user to transfer room access to.');
+      return;
+    }
+
+    const selectedUser = eligibleUsers.find((u) => u.username === selectedUsername);
+    if (!selectedUser || !isUserScheduleActiveNow(selectedUser, userSchedules)) {
+      setErrorMessage('The selected user is outside their active access schedule and cannot unlock/lock the room.');
       return;
     }
 
@@ -139,18 +155,26 @@ export const TransferAccessModal: React.FC<TransferAccessModalProps> = ({ isOpen
               ) : (
                 <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                   {eligibleUsers.map((user) => {
-                    const isSelected = selectedUsername === user.username;
+                    const isAllowed = isUserScheduleActiveNow(user, userSchedules);
+                    const isSelected = selectedUsername === user.username && isAllowed;
                     const isUserAdmin = user.type === 'admin';
 
                     return (
                       <div
                         key={user.username}
                         id={`select-user-${user.username}`}
-                        onClick={() => setSelectedUsername(user.username)}
-                        className={`p-2.5 rounded-2xl border flex items-center justify-between cursor-pointer transition-all ${
-                          isSelected
-                            ? 'bg-cyan-500/15 border-cyan-500/70 shadow-[0_0_15px_rgba(6,182,212,0.2)]'
-                            : 'bg-[#090d16] border-slate-800/90 hover:border-slate-700'
+                        onClick={() => {
+                          if (isAllowed) {
+                            setSelectedUsername(user.username);
+                            setErrorMessage(null);
+                          }
+                        }}
+                        className={`p-2.5 rounded-2xl border flex items-center justify-between transition-all ${
+                          !isAllowed
+                            ? 'opacity-40 bg-[#090d16]/50 border-slate-800/40 cursor-not-allowed select-none'
+                            : isSelected
+                            ? 'bg-cyan-500/15 border-cyan-500/70 shadow-[0_0_15px_rgba(6,182,212,0.2)] cursor-pointer'
+                            : 'bg-[#090d16] border-slate-800/90 hover:border-slate-700 cursor-pointer'
                         }`}
                       >
                         <div className="flex items-center gap-2.5">
@@ -158,18 +182,24 @@ export const TransferAccessModal: React.FC<TransferAccessModalProps> = ({ isOpen
                             <img
                               src={user.avatarUrl || user_png}
                               alt={user.username}
-                              className="w-8 h-8 rounded-full object-cover border border-slate-600"
+                              className={`w-8 h-8 rounded-full object-cover border ${
+                                !isAllowed ? 'border-slate-700 grayscale' : 'border-slate-600'
+                              }`}
                             />
-                            {user.isOnline && (
+                            {user.isOnline && isAllowed && (
                               <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 border border-[#090d16]" />
                             )}
                           </div>
                           <div>
                             <div className="flex items-center gap-2">
-                              <span className="text-xs font-bold text-white">{user.username}</span>
+                              <span className={`text-xs font-bold ${!isAllowed ? 'text-slate-500 line-through' : 'text-white'}`}>
+                                {user.username}
+                              </span>
                               <span
                                 className={`text-[8px] font-mono px-1.5 py-0.2 rounded border uppercase font-bold ${
-                                  isUserAdmin
+                                  !isAllowed
+                                    ? 'bg-slate-800 text-slate-500 border-slate-700'
+                                    : isUserAdmin
                                     ? 'bg-red-500/20 text-red-300 border-red-500/30'
                                     : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
                                 }`}
@@ -177,11 +207,21 @@ export const TransferAccessModal: React.FC<TransferAccessModalProps> = ({ isOpen
                                 {user.type}
                               </span>
                             </div>
+                            {!isAllowed && (
+                              <p className="text-[10px] text-amber-400/80 font-mono mt-0.5 flex items-center gap-1">
+                                <Ban className="w-2.5 h-2.5 shrink-0" />
+                                <span>Outside active access schedule</span>
+                              </p>
+                            )}
                           </div>
                         </div>
 
                         <div className="flex items-center gap-2">
-                          {isSelected ? (
+                          {!isAllowed ? (
+                            <span className="text-[10px] font-mono text-slate-600 px-2 py-0.5 rounded bg-slate-900 border border-slate-800/80">
+                              Locked
+                            </span>
+                          ) : isSelected ? (
                             <div className="w-5 h-5 rounded-full bg-cyan-500 flex items-center justify-center text-slate-950">
                               <CheckCircle2 className="w-4 h-4" />
                             </div>

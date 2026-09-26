@@ -1,5 +1,6 @@
-import React from 'react';
-import { Clock, Calendar, Edit3, Trash2, KeyRound, Shield, CheckCircle2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { Clock, Calendar, Edit3, Trash2, KeyRound, Shield, ChevronDown, ChevronUp } from 'lucide-react';
+import { DayScheduleConfig } from '../types';
 
 interface ScheduleCardProps {
   label: string;
@@ -7,17 +8,21 @@ interface ScheduleCardProps {
   time: string;
   color?: string;
   days?: string[];
+  dayConfigs?: Record<string, DayScheduleConfig>;
   status?: 'active' | 'restricted';
   isAdminViewer?: boolean;
   onEdit?: () => void;
   onDelete?: () => void;
 }
 
+const ALL_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
 export const ScheduleCard: React.FC<ScheduleCardProps> = ({
-  label,
-  role,
-  time,
-  days,
+  label = '',
+  role = 'user',
+  time = '',
+  days = [],
+  dayConfigs,
   status = 'active',
   isAdminViewer = false,
   onEdit,
@@ -25,10 +30,18 @@ export const ScheduleCard: React.FC<ScheduleCardProps> = ({
 }) => {
   const isRestricted = status === 'restricted';
   const isAdmin = role === 'admin';
+  const [showDayBreakdown, setShowDayBreakdown] = useState(false);
+
+  const hasDayConfigs = dayConfigs && typeof dayConfigs === 'object' && Object.keys(dayConfigs).length > 0;
+  const activeDaysList = hasDayConfigs
+    ? ALL_DAYS.filter((d) => dayConfigs[d]?.enabled)
+    : days || [];
+
+  const cardIdSafe = (label || 'user').replace(/[^a-zA-Z0-9]/g, '');
 
   return (
     <div
-      id={`schedule-card-${label.replace(/[^a-zA-Z0-9]/g, '')}`}
+      id={`schedule-card-${cardIdSafe}`}
       onClick={isAdminViewer && onEdit ? onEdit : undefined}
       className={`relative rounded-2xl p-4 transition-all duration-200 bg-[#0f172a] border border-slate-800/90 shadow-md group ${
         isAdminViewer && onEdit
@@ -109,32 +122,92 @@ export const ScheduleCard: React.FC<ScheduleCardProps> = ({
         )}
       </div>
 
-      {/* Time & Days Details */}
-      <div className="mt-3.5 pt-3 border-t border-slate-800/80 space-y-2">
+      {/* Time & Days Summary Details */}
+      <div className="mt-3.5 pt-3 border-t border-slate-800/80 space-y-2.5">
         <div className="flex items-center gap-2 text-xs">
           <Clock className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-          <span className="text-slate-400 text-[11px] font-mono uppercase">Authorized Hours:</span>
-          <span className="text-white font-mono font-medium text-xs">{time}</span>
+          <span className="text-slate-400 text-[11px] font-mono uppercase">Authorized Schedule:</span>
+          <span className="text-white font-mono font-medium text-xs break-all">{time}</span>
         </div>
 
-        {days && days.length > 0 && (
-          <div className="flex items-center gap-2 text-xs">
+        {/* Day Pills Bar */}
+        <div className="flex items-center justify-between gap-2 flex-wrap text-xs">
+          <div className="flex items-center gap-2">
             <Calendar className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
             <span className="text-slate-400 text-[11px] font-mono uppercase">Allowed Days:</span>
             <div className="flex flex-wrap gap-1">
-              {days.map((day) => (
-                <span
-                  key={day}
-                  className="px-1.5 py-0.5 rounded bg-[#1e293b] text-[10px] font-mono font-semibold border border-slate-700"
-                >
-                  {day}
-                </span>
-              ))}
+              {ALL_DAYS.map((day) => {
+                const isDayActive = hasDayConfigs
+                  ? !!dayConfigs[day]?.enabled
+                  : (days || []).includes(day);
+
+                return (
+                  <span
+                    key={day}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border transition-colors ${
+                      isDayActive
+                        ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30'
+                        : 'bg-[#090d16]/60 text-slate-600 border-slate-800'
+                    }`}
+                  >
+                    {day}
+                  </span>
+                );
+              })}
             </div>
+          </div>
+
+          {hasDayConfigs && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowDayBreakdown(!showDayBreakdown);
+              }}
+              className="text-[11px] font-mono text-cyan-400 hover:text-cyan-300 flex items-center gap-1 cursor-pointer ml-auto"
+            >
+              <span>{showDayBreakdown ? 'Hide Daily Details' : 'View Daily Details'}</span>
+              {showDayBreakdown ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
+          )}
+        </div>
+
+        {/* Detailed Per-Day Breakdown when toggled or expanded */}
+        {hasDayConfigs && showDayBreakdown && (
+          <div className="mt-2.5 p-2.5 bg-[#090d16] rounded-xl border border-slate-800 space-y-1.5 animate-fade-in text-[11px] font-mono">
+            {ALL_DAYS.map((day) => {
+              const cfg = dayConfigs[day];
+              const isEnabled = cfg?.enabled;
+              return (
+                <div
+                  key={day}
+                  className={`flex items-center justify-between py-1 px-2 rounded-lg ${
+                    isEnabled ? 'bg-[#1e293b]/50 text-slate-200' : 'text-slate-600'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${isEnabled ? 'bg-cyan-400' : 'bg-slate-700'}`} />
+                    <span className="font-bold">{day}</span>
+                  </div>
+                  <div>
+                    {isEnabled ? (
+                      cfg?.is24Hours ? (
+                        <span className="text-cyan-400 font-bold">24/7 Unlimited Access</span>
+                      ) : (
+                        <span className="text-white font-medium">
+                          {cfg?.startTime || '09:00 AM'} — {cfg?.endTime || '05:00 PM'}
+                        </span>
+                      )
+                    ) : (
+                      <span className="text-slate-600 italic">No Access</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
-
     </div>
   );
 };

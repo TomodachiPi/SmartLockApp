@@ -347,6 +347,7 @@ export const UsersScreen: React.FC = () => {
                 role={sched.role}
                 time={sched.time}
                 days={sched.days}
+                dayConfigs={sched.dayConfigs}
                 status={sched.status}
                 isAdminViewer={isAdmin}
                 onEdit={isAdmin ? () => handleOpenEditSchedule(sched) : undefined}

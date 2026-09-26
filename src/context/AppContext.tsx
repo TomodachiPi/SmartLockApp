@@ -102,6 +102,18 @@ const defaultProfiles: Profile[] = [
   },
 ];
 
+export function parseTimeToMinutes(tStr: string): number | null {
+  if (!tStr) return null;
+  const match = tStr.trim().match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?/i);
+  if (!match) return null;
+  let h = parseInt(match[1], 10);
+  const m = match[2] ? parseInt(match[2], 10) : 0;
+  const ampm = match[3] ? match[3].toUpperCase() : null;
+  if (ampm === 'PM' && h < 12) h += 12;
+  if (ampm === 'AM' && h === 12) h = 0;
+  return h * 60 + m;
+}
+
 const defaultSchedules: UserSchedule[] = [
   {
     id: '1',
@@ -111,16 +123,34 @@ const defaultSchedules: UserSchedule[] = [
     days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
     startTime: '12:00 AM',
     endTime: '11:59 PM',
+    dayConfigs: {
+      Mon: { enabled: true, is24Hours: true, startTime: '12:00 AM', endTime: '11:59 PM' },
+      Tue: { enabled: true, is24Hours: true, startTime: '12:00 AM', endTime: '11:59 PM' },
+      Wed: { enabled: true, is24Hours: true, startTime: '12:00 AM', endTime: '11:59 PM' },
+      Thu: { enabled: true, is24Hours: true, startTime: '12:00 AM', endTime: '11:59 PM' },
+      Fri: { enabled: true, is24Hours: true, startTime: '12:00 AM', endTime: '11:59 PM' },
+      Sat: { enabled: true, is24Hours: true, startTime: '12:00 AM', endTime: '11:59 PM' },
+      Sun: { enabled: true, is24Hours: true, startTime: '12:00 AM', endTime: '11:59 PM' },
+    },
     status: 'active',
   },
   {
     id: '2',
     label: 'User123test',
     role: 'user',
-    time: '10:00 AM to 01:00 PM, Tuesday',
+    time: 'Tue: 10:00 AM - 01:00 PM',
     days: ['Tue'],
     startTime: '10:00 AM',
     endTime: '01:00 PM',
+    dayConfigs: {
+      Mon: { enabled: false, is24Hours: false, startTime: '09:00 AM', endTime: '05:00 PM' },
+      Tue: { enabled: true, is24Hours: false, startTime: '10:00 AM', endTime: '01:00 PM' },
+      Wed: { enabled: false, is24Hours: false, startTime: '09:00 AM', endTime: '05:00 PM' },
+      Thu: { enabled: false, is24Hours: false, startTime: '09:00 AM', endTime: '05:00 PM' },
+      Fri: { enabled: false, is24Hours: false, startTime: '09:00 AM', endTime: '05:00 PM' },
+      Sat: { enabled: false, is24Hours: false, startTime: '09:00 AM', endTime: '05:00 PM' },
+      Sun: { enabled: false, is24Hours: false, startTime: '09:00 AM', endTime: '05:00 PM' },
+    },
     status: 'active',
   },
 ];
@@ -134,6 +164,140 @@ function formatTimeAndDate(d = new Date()) {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const dateStr = `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
   return { timeStr, dateStr };
+}
+
+export function isUserScheduleActiveNow(
+  user: Profile | null,
+  schedules: UserSchedule[]
+): boolean {
+  if (!user) return false;
+  if (user.type === 'admin') return true; // Admins have 24/7 master clearance
+
+  const userSchedules = schedules.filter(
+    (s) => s.label.toLowerCase() === user.username.toLowerCase()
+  );
+
+  // Non-admin users MUST have an explicit access schedule configured
+  if (userSchedules.length === 0) {
+    return false;
+  }
+
+  const now = new Date();
+  const dayNamesShort = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const dayNamesFull = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const dayIdx = now.getDay();
+  const currentShort = dayNamesShort[dayIdx];
+  const currentFull = dayNamesFull[dayIdx];
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+  return userSchedules.some((schedule) => {
+    if (schedule.status === 'restricted') return false;
+
+    // Check if per-day custom configs exist
+    if (schedule.dayConfigs && Object.keys(schedule.dayConfigs).length > 0) {
+      const todayKey = Object.keys(schedule.dayConfigs).find(
+        (k) => k.toLowerCase() === currentShort.toLowerCase() || k.toLowerCase() === currentFull.toLowerCase()
+      );
+
+      if (!todayKey) return false;
+      const dayConfig = schedule.dayConfigs[todayKey];
+      if (!dayConfig || !dayConfig.enabled) return false;
+      if (dayConfig.is24Hours) return true;
+
+      const startM = dayConfig.startTime ? parseTimeToMinutes(dayConfig.startTime) : null;
+      const endM = dayConfig.endTime ? parseTimeToMinutes(dayConfig.endTime) : null;
+
+      if (startM !== null && endM !== null) {
+        if (endM >= startM) {
+          return currentMinutes >= startM && currentMinutes <= endM;
+        } else {
+          return currentMinutes >= startM || currentMinutes <= endM;
+        }
+      }
+      return true;
+    }
+
+    // Fallback: Legacy days & time format
+    const timeStr = (schedule.time || '').toLowerCase();
+    const is24_7 = timeStr.includes('24/7') || timeStr.includes('any time') || timeStr.includes('unlimited access');
+
+    let dayMatches = false;
+    if (schedule.days && schedule.days.length > 0) {
+      dayMatches = schedule.days.some((d) => {
+        const dClean = d.trim().toLowerCase();
+        if (dClean === currentShort.toLowerCase() || dClean === currentFull.toLowerCase()) return true;
+        if (dClean.startsWith(currentShort.toLowerCase())) return true;
+        if (dClean === 'all' || dClean.includes('all days') || dClean.includes('everyday')) return true;
+        if (dClean.includes('weekday') && dayIdx >= 1 && dayIdx <= 5) return true;
+        if (dClean.includes('weekend') && (dayIdx === 0 || dayIdx === 6)) return true;
+        return false;
+      });
+    } else {
+      if (
+        timeStr.includes('monday to sunday') ||
+        timeStr.includes('mon-sun') ||
+        timeStr.includes('all days') ||
+        timeStr.includes('daily') ||
+        timeStr.includes('everyday')
+      ) {
+        dayMatches = true;
+      } else if (
+        (timeStr.includes('mon-fri') ||
+          timeStr.includes('monday to friday') ||
+          timeStr.includes('weekdays')) &&
+        dayIdx >= 1 &&
+        dayIdx <= 5
+      ) {
+        dayMatches = true;
+      } else if (
+        (timeStr.includes('weekends') || timeStr.includes('sat-sun') || timeStr.includes('sat & sun')) &&
+        (dayIdx === 0 || dayIdx === 6)
+      ) {
+        dayMatches = true;
+      } else if (
+        timeStr.includes(currentFull.toLowerCase()) ||
+        timeStr.includes(currentShort.toLowerCase())
+      ) {
+        dayMatches = true;
+      } else {
+        const mentionsOtherDays = dayNamesFull.some(
+          (fullDay, idx) =>
+            idx !== dayIdx &&
+            (timeStr.includes(fullDay.toLowerCase()) || timeStr.includes(dayNamesShort[idx].toLowerCase()))
+        );
+        dayMatches = !mentionsOtherDays && (dayIdx >= 1 && dayIdx <= 5);
+      }
+    }
+
+    if (!dayMatches) return false;
+    if (is24_7) return true;
+
+    let startM: number | null = null;
+    let endM: number | null = null;
+
+    if (schedule.startTime && schedule.endTime) {
+      startM = parseTimeToMinutes(schedule.startTime);
+      endM = parseTimeToMinutes(schedule.endTime);
+    } else if (schedule.time) {
+      const rangeMatch = schedule.time.match(
+        /(\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)\s*(?:to|-)\s*(\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)/i
+      );
+      if (rangeMatch) {
+        startM = parseTimeToMinutes(rangeMatch[1]);
+        endM = parseTimeToMinutes(rangeMatch[2]);
+      }
+    }
+
+    if (startM !== null && endM !== null) {
+      if (endM >= startM) {
+        return currentMinutes >= startM && currentMinutes <= endM;
+      } else {
+        return currentMinutes >= startM || currentMinutes <= endM;
+      }
+    }
+
+    return true;
+  });
 }
 
 function getDefaultWsUrl(): string {
@@ -560,7 +724,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             prev.map((p) => (p.username.toLowerCase() === payload.username.toLowerCase() ? { ...p, ...payload } : p))
           );
         } else if (action === 'delete' && payload) {
-          setProfiles((prev) => prev.filter((p) => p.username.toLowerCase() !== payload.username.toLowerCase()));
+          const uName = (payload.username || '').toLowerCase();
+          if (uName) {
+            setProfiles((prev) => prev.filter((p) => p.username.toLowerCase() !== uName));
+            setUserSchedules((prev) => prev.filter((s) => s.label.toLowerCase() !== uName));
+            setLabNotes((prev) => prev.filter((n) => n.username.toLowerCase() !== uName));
+            if (currentUserRef.current?.username.toLowerCase() === uName) {
+              logout();
+            }
+          }
+        }
+      } else if (entity === 'schedules') {
+        if (action === 'create' && payload) {
+          setUserSchedules((prev) => {
+            if (prev.some((s) => s.id === payload.id)) return prev;
+            return [...prev, payload];
+          });
+        } else if (action === 'update' && payload) {
+          setUserSchedules((prev) => prev.map((s) => (s.id === payload.id ? { ...s, ...payload } : s)));
+        } else if (action === 'delete' && payload) {
+          setUserSchedules((prev) => prev.filter((s) => s.id !== payload.id));
+        }
+      } else if (entity === 'labNotes') {
+        if (action === 'create' && payload) {
+          setLabNotes((prev) => {
+            if (prev.some((n) => n.id === payload.id)) return prev;
+            return [payload, ...prev];
+          });
+        } else if (action === 'update' && payload) {
+          setLabNotes((prev) => prev.map((n) => (n.id === payload.id ? { ...n, ...payload } : n)));
+        } else if (action === 'delete' && payload) {
+          setLabNotes((prev) => prev.filter((n) => n.id !== payload.id));
         }
       }
     } else if (parsed.type === 'LOCK_PROGRESS') {
@@ -642,26 +836,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [connectWebSocket, isSimulatorActive]);
 
-  // PERIODIC SYNC POLLING: Send WebSocket POLL_REQUEST every half a minute (30s)
+  // PERIODIC SYNC POLLING: Send WebSocket POLL_REQUEST every 5 seconds to sync schedules and presence
   useEffect(() => {
     const pollInterval = setInterval(() => {
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
         const pollMsg: ClientMessage = {
           type: 'POLL_REQUEST',
           client: 'SmartLockApp',
+          username: currentUserRef.current?.username,
           timestamp: Date.now(),
         };
         try {
           wsRef.current.send(JSON.stringify(pollMsg));
-          addWsLog('send', '[Periodic 30s Poll] Sent POLL_REQUEST to ESP8266');
+          addWsLog('send', `[Periodic 5s Poll] Sent POLL_REQUEST to ESP8266/Server (${currentUserRef.current?.username || 'Guest'})`);
         } catch (e: any) {
           addWsLog('system', `Failed to send periodic poll: ${e.message}`);
         }
       }
-    }, 30000); // 30 seconds
+    }, 5000); // 5 seconds interval
 
     return () => clearInterval(pollInterval);
   }, [addWsLog]);
+
+  // Broadcast user online presence on login / mount
+  useEffect(() => {
+    if (currentUser?.username && wsStatus === 'connected') {
+      sendWsJson({
+        type: 'USER_PRESENCE',
+        username: currentUser.username,
+        status: 'online',
+        timestamp: Date.now(),
+      });
+    }
+  }, [currentUser?.username, wsStatus, sendWsJson]);
 
   // BroadcastChannel listener for multi-tab / multi-window instant synchronization
   useEffect(() => {
@@ -677,6 +884,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (target) setActiveRoomHolder(null);
         } else if (actionData.type === 'ROOM_TRANSFER_ACTION' && actionData.subType === 'respond' && actionData.accept) {
           if (actionData.toUsername) setActiveRoomHolder(actionData.toUsername);
+        } else if (actionData.type === 'DATA_UPDATE_ACTION') {
+          if (actionData.entity === 'labNotes') {
+            if (actionData.action === 'create' && actionData.payload) {
+              setLabNotes((prev) => [actionData.payload, ...prev.filter((n) => n.id !== actionData.payload.id)]);
+            } else if (actionData.action === 'update' && actionData.payload) {
+              setLabNotes((prev) => prev.map((n) => (n.id === actionData.payload.id ? actionData.payload : n)));
+            } else if (actionData.action === 'delete' && actionData.payload) {
+              setLabNotes((prev) => prev.filter((n) => n.id !== actionData.payload.id));
+            }
+          }
         }
       }
     };
@@ -725,9 +942,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const toggleLock = () => {
     if (changing) return;
 
-    const willBeLocked = !lockedRef.current;
     const actingUser = currentUserRef.current?.username || 'Administrator';
     const actingRole = currentUserRef.current?.type || 'admin';
+
+    // Verify schedule access permissions for non-admin users
+    if (actingRole !== 'admin' && !isUserScheduleActiveNow(currentUserRef.current, userSchedules)) {
+      addWsLog('system', `Access Denied: ${actingUser} is outside authorized schedule.`);
+      return;
+    }
+
+    const willBeLocked = !lockedRef.current;
     const { timeStr, dateStr } = formatTimeAndDate();
 
     setChanging(true);
@@ -879,8 +1103,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Room Transfer Initiation
   const initiateRoomTransfer = (toUsername: string, notes?: string): { success: boolean; error?: string } => {
     if (!currentUser) return { success: false, error: 'You must be logged in to transfer room access.' };
-    if (currentUser.username.toLowerCase() === toUsername.trim().toLowerCase()) {
+    const cleanToUsername = toUsername.trim();
+    if (currentUser.username.toLowerCase() === cleanToUsername.toLowerCase()) {
       return { success: false, error: 'Cannot transfer room access to yourself.' };
+    }
+
+    const targetUser = profiles.find((p) => p.username.toLowerCase() === cleanToUsername.toLowerCase());
+    if (!targetUser) {
+      return { success: false, error: `User "${cleanToUsername}" not found.` };
+    }
+
+    if (!isUserScheduleActiveNow(targetUser, userSchedules)) {
+      return {
+        success: false,
+        error: `Cannot transfer access: ${targetUser.username} does not have an active access schedule that allows room access.`,
+      };
     }
 
     const { timeStr, dateStr } = formatTimeAndDate();
@@ -890,7 +1127,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       fromUsername: currentUser.username,
       fromUserRole: currentUser.type,
       fromPermission: currentUser.permission,
-      toUsername: toUsername.trim(),
+      toUsername: cleanToUsername,
       doorName: 'Laboratory SmartLock #1',
       timestamp: `${timeStr}, ${dateStr}`,
       timestampMs: Date.now(),
@@ -906,7 +1143,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       subType: 'transfer',
       transferId: newTransfer.id,
       fromUsername: currentUser.username,
-      toUsername: toUsername.trim(),
+      toUsername: cleanToUsername,
       notes: notes?.trim(),
       timestamp: Date.now(),
     });
@@ -1067,6 +1304,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCurrentUser(updatedUser);
     setActiveTab('lock');
     setWelcomeMessage(`Welcome, ${updatedUser.username}! — The SmartLock Unit is ready.`);
+
+    sendWsJson({
+      type: 'USER_PRESENCE',
+      username: updatedUser.username,
+      status: 'online',
+      timestamp: Date.now(),
+    });
+
     return { success: true };
   };
 
@@ -1140,7 +1385,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const logout = () => {
     if (currentUser) {
-      setProfiles((prev) => prev.map((p) => (p.username === currentUser.username ? { ...p, isOnline: false, lastActive: 'Logged out' } : p)));
+      sendWsJson({
+        type: 'USER_PRESENCE',
+        username: currentUser.username,
+        status: 'offline',
+        timestamp: Date.now(),
+      });
+      setProfiles((prev) =>
+        prev.map((p) =>
+          p.username.toLowerCase() === currentUser.username.toLowerCase()
+            ? { ...p, isOnline: false, lastActive: 'Offline' }
+            : p
+        )
+      );
     }
     setCurrentUser(null);
     setActiveTab('lock');
@@ -1229,14 +1486,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const adminDeleteUser = (username: string): { success: boolean; error?: string } => {
-    if (currentUser?.username === username) return { success: false, error: 'Cannot delete your own active administrator account.' };
-    setProfiles((prev) => prev.filter((p) => p.username !== username));
+    const cleanUsername = username.trim();
+    if (!cleanUsername) return { success: false, error: 'Valid username required.' };
+    
+    if (currentUser?.username.toLowerCase() === cleanUsername.toLowerCase()) {
+      return { success: false, error: 'Cannot delete your own active account.' };
+    }
+    if (cleanUsername.toLowerCase() === 'administrator') {
+      return { success: false, error: 'The primary system Administrator account cannot be deleted.' };
+    }
 
+    // 1. Remove profile
+    setProfiles((prev) => prev.filter((p) => p.username.toLowerCase() !== cleanUsername.toLowerCase()));
+
+    // 2. Cascade delete all associated access schedules for this user
+    setUserSchedules((prev) => prev.filter((s) => s.label.toLowerCase() !== cleanUsername.toLowerCase()));
+
+    // 3. Cascade delete any lab notes (schedule requests) for this user
+    setLabNotes((prev) => prev.filter((n) => n.username.toLowerCase() !== cleanUsername.toLowerCase()));
+
+    // 4. Send action to ESP8266 & WebSocket server
     sendWsJson({
       type: 'DATA_UPDATE_ACTION',
       entity: 'profiles',
       action: 'delete',
-      payload: { username },
+      payload: { username: cleanUsername },
       timestamp: Date.now(),
     });
 
@@ -1247,6 +1521,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addSchedule = (sched: Omit<UserSchedule, 'id'>) => {
     const newSched: UserSchedule = { ...sched, id: Date.now().toString() };
     setUserSchedules((prev) => [...prev, newSched]);
+    addWsLog('send', `[ESP8266 IoT] New access policy dispatched for "${newSched.label}" (${newSched.time})`);
     sendWsJson({
       type: 'DATA_UPDATE_ACTION',
       entity: 'schedules',
@@ -1258,6 +1533,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateSchedule = (sched: UserSchedule) => {
     setUserSchedules((prev) => prev.map((s) => (s.id === sched.id ? sched : s)));
+    addWsLog('send', `[ESP8266 IoT] Access policy updated for "${sched.label}" (${sched.time})`);
     sendWsJson({
       type: 'DATA_UPDATE_ACTION',
       entity: 'schedules',
@@ -1268,7 +1544,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteSchedule = (id: string) => {
+    const target = userSchedules.find((s) => s.id === id);
     setUserSchedules((prev) => prev.filter((s) => s.id !== id));
+    addWsLog('send', `[ESP8266 IoT] Access policy removed for "${target?.label || id}"`);
     sendWsJson({
       type: 'DATA_UPDATE_ACTION',
       entity: 'schedules',

@@ -25,6 +25,20 @@ let smartLockState = {
   lastUpdated: Date.now(),
 };
 
+// Map of username.toLowerCase() -> timestampMs of last activity/heartbeat
+const onlineUsersLastSeen = new Map<string, number>();
+
+function updateUserPresence(username?: string, isOnline: boolean = true) {
+  if (!username) return;
+  const key = username.trim().toLowerCase();
+  if (!key) return;
+  if (isOnline) {
+    onlineUsersLastSeen.set(key, Date.now());
+  } else {
+    onlineUsersLastSeen.delete(key);
+  }
+}
+
 let profiles: any[] = [
   {
     username: 'Administrator',
@@ -45,10 +59,25 @@ let profiles: any[] = [
     time: [600, 780],
     permission: 'Standard User Access',
     joinedDate: 'Feb 10, 2026',
-    isOnline: true,
+    isOnline: false,
     lastActive: 'Active 5m ago',
   },
 ];
+
+function getSyncedProfiles() {
+  const now = Date.now();
+  return profiles.map((p) => {
+    const key = p.username.toLowerCase();
+    const lastSeen = onlineUsersLastSeen.get(key);
+    // Active if seen in the last 15 seconds
+    const isOnline = lastSeen ? now - lastSeen < 15000 : false;
+    return {
+      ...p,
+      isOnline,
+      lastActive: isOnline ? 'Active now' : p.lastActive || 'Offline',
+    };
+  });
+}
 
 let profileRequests: any[] = [];
 
@@ -61,16 +90,34 @@ let userSchedules: any[] = [
     days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
     startTime: '12:00 AM',
     endTime: '11:59 PM',
+    dayConfigs: {
+      Mon: { enabled: true, is24Hours: true, startTime: '12:00 AM', endTime: '11:59 PM' },
+      Tue: { enabled: true, is24Hours: true, startTime: '12:00 AM', endTime: '11:59 PM' },
+      Wed: { enabled: true, is24Hours: true, startTime: '12:00 AM', endTime: '11:59 PM' },
+      Thu: { enabled: true, is24Hours: true, startTime: '12:00 AM', endTime: '11:59 PM' },
+      Fri: { enabled: true, is24Hours: true, startTime: '12:00 AM', endTime: '11:59 PM' },
+      Sat: { enabled: true, is24Hours: true, startTime: '12:00 AM', endTime: '11:59 PM' },
+      Sun: { enabled: true, is24Hours: true, startTime: '12:00 AM', endTime: '11:59 PM' },
+    },
     status: 'active',
   },
   {
     id: '2',
     label: 'User123test',
     role: 'user',
-    time: '10:00 AM to 01:00 PM, Tuesday',
+    time: 'Tue: 10:00 AM - 01:00 PM',
     days: ['Tue'],
     startTime: '10:00 AM',
     endTime: '01:00 PM',
+    dayConfigs: {
+      Mon: { enabled: false, is24Hours: false, startTime: '09:00 AM', endTime: '05:00 PM' },
+      Tue: { enabled: true, is24Hours: false, startTime: '10:00 AM', endTime: '01:00 PM' },
+      Wed: { enabled: false, is24Hours: false, startTime: '09:00 AM', endTime: '05:00 PM' },
+      Thu: { enabled: false, is24Hours: false, startTime: '09:00 AM', endTime: '05:00 PM' },
+      Fri: { enabled: false, is24Hours: false, startTime: '09:00 AM', endTime: '05:00 PM' },
+      Sat: { enabled: false, is24Hours: false, startTime: '09:00 AM', endTime: '05:00 PM' },
+      Sun: { enabled: false, is24Hours: false, startTime: '09:00 AM', endTime: '05:00 PM' },
+    },
     status: 'active',
   },
 ];
@@ -109,7 +156,7 @@ function buildSyncPayload() {
   return {
     type: 'SYNC_REPLY',
     state: smartLockState,
-    profiles,
+    profiles: getSyncedProfiles(),
     profileRequests,
     userSchedules,
     roomTransfers,
@@ -269,12 +316,35 @@ wss.on('connection', (ws) => {
         return;
       }
 
+      if (parsed.username) {
+        (ws as any).authenticatedUsername = parsed.username;
+        updateUserPresence(parsed.username, true);
+      }
+
       const msgType = parsed.type;
 
       switch (msgType) {
-        // 1. Periodic poll request from client (sent every 30s or during AuthScreen)
+        // 1. Periodic poll request from client (sent every 5s or during AuthScreen)
         case 'POLL_REQUEST': {
+          if (parsed.username) {
+            updateUserPresence(parsed.username, true);
+          }
           ws.send(JSON.stringify(buildSyncPayload()));
+          break;
+        }
+
+        // User presence heartbeat / login / logout notification
+        case 'USER_PRESENCE': {
+          if (parsed.username) {
+            const isOnline = parsed.status === 'online';
+            updateUserPresence(parsed.username, isOnline);
+            if (isOnline) {
+              (ws as any).authenticatedUsername = parsed.username;
+            } else {
+              delete (ws as any).authenticatedUsername;
+            }
+            broadcast(buildSyncPayload());
+          }
           break;
         }
 
@@ -419,9 +489,15 @@ wss.on('connection', (ws) => {
             if (action === 'create') {
               profiles = [...profiles, payload];
             } else if (action === 'update') {
-              profiles = profiles.map((p) => p.username === payload.username ? { ...p, ...payload } : p);
+              profiles = profiles.map((p) => p.username.toLowerCase() === payload.username.toLowerCase() ? { ...p, ...payload } : p);
             } else if (action === 'delete') {
-              profiles = profiles.filter((p) => p.username !== payload.username);
+              const uName = (payload.username || '').toLowerCase();
+              if (uName && uName !== 'administrator') {
+                profiles = profiles.filter((p) => p.username.toLowerCase() !== uName);
+                userSchedules = userSchedules.filter((s) => s.label.toLowerCase() !== uName);
+                labNotes = labNotes.filter((n) => n.username.toLowerCase() !== uName);
+                onlineUsersLastSeen.delete(payload.username);
+              }
             }
           } else if (entity === 'profileRequests') {
             if (action === 'create') {
@@ -451,9 +527,10 @@ wss.on('connection', (ws) => {
             }
           } else if (entity === 'schedules') {
             if (action === 'create') {
-              userSchedules = [...userSchedules, { ...payload, id: Date.now().toString() }];
+              const newSched = { ...payload, id: payload.id || Date.now().toString() };
+              userSchedules = [...userSchedules.filter((s) => s.id !== newSched.id), newSched];
             } else if (action === 'update') {
-              userSchedules = userSchedules.map((s) => s.id === payload.id ? payload : s);
+              userSchedules = userSchedules.map((s) => s.id === payload.id ? { ...s, ...payload } : s);
             } else if (action === 'delete') {
               userSchedules = userSchedules.filter((s) => s.id !== payload.id);
             }
@@ -507,6 +584,26 @@ wss.on('connection', (ws) => {
       }
     } catch (err) {
       console.error('[WebSocket Server] Error parsing message:', err);
+    }
+  });
+
+  ws.on('close', () => {
+    const user = (ws as any).authenticatedUsername;
+    if (user) {
+      let otherSocketOpen = false;
+      wss.clients.forEach((c) => {
+        if (
+          c !== ws &&
+          (c as any).authenticatedUsername?.toLowerCase() === user.toLowerCase() &&
+          c.readyState === WebSocket.OPEN
+        ) {
+          otherSocketOpen = true;
+        }
+      });
+      if (!otherSocketOpen) {
+        updateUserPresence(user, false);
+        broadcast(buildSyncPayload());
+      }
     }
   });
 });

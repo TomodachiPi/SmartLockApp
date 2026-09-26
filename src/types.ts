@@ -36,6 +36,13 @@ export interface HistoryRecord {
   emergencyReason?: string;
 }
 
+export interface DayScheduleConfig {
+  enabled: boolean;
+  is24Hours?: boolean;
+  startTime?: string;
+  endTime?: string;
+}
+
 export interface UserSchedule {
   id: string;
   label: string;
@@ -45,6 +52,7 @@ export interface UserSchedule {
   days?: string[];
   startTime?: string;
   endTime?: string;
+  dayConfigs?: Record<string, DayScheduleConfig>;
   status?: 'active' | 'restricted';
 }
 

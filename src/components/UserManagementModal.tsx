@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Profile } from '../types';
+import { useApp } from '../context/AppContext';
 import {
   Upload,
   UserPlus,
@@ -57,7 +58,12 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   onSaveUser,
   onDeleteUser,
 }) => {
+  const { currentUser } = useApp();
   const isEditing = !!userToEdit;
+
+  const isSelfAccount = isSelf || (!!currentUser && !!userToEdit && (userToEdit.username.toLowerCase() === currentUser.username.toLowerCase()));
+  const isAdministratorAccount = !!userToEdit && (userToEdit.username.toLowerCase() === 'administrator');
+  const canDelete = isEditing && !isSelfAccount && !isAdministratorAccount && !!onDeleteUser;
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -191,6 +197,16 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
 
   const handleDelete = () => {
     if (!userToEdit || !onDeleteUser) return;
+    if (isSelfAccount) {
+      setErrorMessage('You cannot delete your own account.');
+      setIsConfirmingDelete(false);
+      return;
+    }
+    if (isAdministratorAccount) {
+      setErrorMessage('The primary Administrator account cannot be deleted.');
+      setIsConfirmingDelete(false);
+      return;
+    }
     const result = onDeleteUser(userToEdit.username);
     if (!result.success) {
       setErrorMessage(result.error || 'Failed to delete user profile.');
@@ -387,7 +403,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
             />
           </div>
 
-          {!isSelf && isEditing && onDeleteUser && (
+          {canDelete && (
             <div className="pt-2 border-t border-slate-800/80">
               {!isConfirmingDelete ? (
                 <button

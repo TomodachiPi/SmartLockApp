@@ -1,3 +1,16 @@
+            {/* Currently Selected User Confirmation Badge */}
+            {selectedUsername && (
+              <div className="mt-2 pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs">
+                <span className="text-slate-400 font-mono text-[11px]">Selected Account:</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-cyan-300 font-bold font-mono">{selectedUsername}</span>
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-cyan-950/70 text-cyan-400 border border-cyan-500/30">
+                    Role: {role}
+                  </span>
+                </div>
+              </div>
+            )}
+
         <div className="flex items-center gap-2 text-xs text-slate-400">
           <KeyRound className="w-3.5 h-3.5 text-slate-400 shrink-0" />
           <span>{permission}</span>

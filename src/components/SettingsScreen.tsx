@@ -498,6 +498,7 @@ export const SettingsScreen: React.FC = () => {
                           id={`admin-edit-user-btn-${profile.username}`}
                           type="button"
                           onClick={() => {
+                            setIsUserSelf(isSelf);
                             setSelectedUserToManage(profile);
                             setIsUserManageModalOpen(true);
                           }}
@@ -507,11 +508,12 @@ export const SettingsScreen: React.FC = () => {
                           <span>Modify</span>
                         </button>
 
-                        {!isSelf && (
+                        {!isSelf && profile.username.toLowerCase() !== 'administrator' && (
                           <button
                             id={`admin-delete-user-btn-${profile.username}`}
                             type="button"
                             onClick={() => {
+                              setIsUserSelf(isSelf);
                               setSelectedUserToManage(profile);
                               setIsUserManageModalOpen(true);
                             }}
@@ -593,6 +595,7 @@ export const SettingsScreen: React.FC = () => {
                     role={sched.role}
                     time={sched.time}
                     days={sched.days}
+                    dayConfigs={sched.dayConfigs}
                     status={sched.status}
                     isAdminViewer={isAdmin}
                     onEdit={isAdmin ? () => handleOpenEditSchedule(sched) : undefined}
