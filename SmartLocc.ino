@@ -55,6 +55,7 @@ struct SmartLockUser {
   String password;
   String type;        // "admin" or "user"
   String permission;  // e.g. "Admin Privilege" or "Standard User Access"
+  String avatarUrl;   // Data URL or image path, stored in LittleFS
 };
 
 struct SmartLockRequest {
@@ -183,12 +184,115 @@ String extractJsonString(String json, String key) {
 // -------------------------------------------------------------
 // User Management & LittleFS Persistence
 // -------------------------------------------------------------
+void saveAvatarToFS(String username, String avatarUrl) {
+  if (username.length() == 0) return;
+  String path = "/avatar_" + username + ".txt";
+  File f = LittleFS.open(path, "w");
+  if (f) {
+    f.print(avatarUrl);
+    f.close();
+  }
+}
+
+String loadAvatarFromFS(String username) {
+  if (username.length() == 0) return "/images/user.png";
+  String path = "/avatar_" + username + ".txt";
+  if (LittleFS.exists(path)) {
+    File f = LittleFS.open(path, "r");
+    if (f) {
+      String av = f.readString();
+      f.close();
+      av.trim();
+      if (av.length() > 0) return av;
+    }
+  }
+  return "/images/user.png";
+}
+
+String extractDaysString(String json) {
+  // 1. Direct comma-separated string: "days":"Mon,Tue,Wed" or "daysStr":"..."
+  String daysStr = extractJsonString(json, "daysStr");
+  if (daysStr.length() > 0 && daysStr != "[") return daysStr;
+
+  String strVal = extractJsonString(json, "days");
+  if (strVal.length() > 0 && strVal != "[") return strVal;
+
+  // 2. JSON array: "days":["Mon","Tue"] or "days": ["Mon", "Tue"]
+  int daysIdx = json.indexOf("\"days\":");
+  if (daysIdx < 0) daysIdx = json.indexOf("\"days\" :");
+  if (daysIdx >= 0) {
+    int arrStart = json.indexOf('[', daysIdx);
+    int arrEnd = (arrStart >= 0) ? json.indexOf(']', arrStart) : -1;
+    if (arrStart >= 0 && arrEnd > arrStart) {
+      String inside = json.substring(arrStart + 1, arrEnd);
+      String result = "";
+      const char* allDays[7] = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
+      for (int i = 0; i < 7; i++) {
+        if (inside.indexOf(allDays[i]) >= 0) {
+          if (result.length() > 0) result += ",";
+          result += allDays[i];
+        }
+      }
+      if (result.length() > 0) return result;
+    }
+  }
+  return "Mon,Tue,Wed,Thu,Fri";
+}
+
+String extractDayConfigsJson(String json) {
+  int idx = json.indexOf("\"dayConfigs\":");
+  if (idx < 0) idx = json.indexOf("\"dayConfigs\" :");
+  if (idx >= 0) {
+    int objStart = json.indexOf('{', idx);
+    if (objStart >= 0) {
+      int braceCount = 1;
+      int cur = objStart + 1;
+      while (cur < json.length() && braceCount > 0) {
+        if (json[cur] == '{') braceCount++;
+        else if (json[cur] == '}') braceCount--;
+        cur++;
+      }
+      if (braceCount == 0) {
+        return json.substring(objStart, cur);
+      }
+    }
+  }
+  return "";
+}
+
+void saveDayConfigsToFS(String id, String cfgJson) {
+  if (id.length() == 0 || cfgJson.length() == 0) return;
+  String path = "/daycfg_" + id + ".json";
+  File f = LittleFS.open(path, "w");
+  if (f) {
+    f.print(cfgJson);
+    f.close();
+  }
+}
+
+String loadDayConfigsFromFS(String id) {
+  if (id.length() == 0) return "";
+  String path = "/daycfg_" + id + ".json";
+  if (LittleFS.exists(path)) {
+    File f = LittleFS.open(path, "r");
+    if (f) {
+      String content = f.readString();
+      f.close();
+      content.trim();
+      if (content.length() > 0 && content.startsWith("{") && content.endsWith("}")) {
+        return content;
+      }
+    }
+  }
+  return "";
+}
+
 void initDefaultUsers() {
   userCount = 0;
   // Default Admin
-  userList[userCount++] = { "Administrator", "admin123", "admin", "Admin Privilege" };
-  // Default Standard User (Sarah_Chen and Alex_Rivera removed)
-  userList[userCount++] = { "User123test", "user", "user", "Standard User Access" };
+  userList[userCount++] = { "Administrator", "admin123", "admin", "Admin Privilege", "/images/user.png" };
+  // Default Standard User
+  userList[userCount++] = { "User123test", "user", "user", "Standard User Access", "/images/user.png" };
 }
 
 void saveUsersToFS() {
@@ -196,6 +300,9 @@ void saveUsersToFS() {
   if (f) {
     for (int i = 0; i < userCount; i++) {
       f.println(userList[i].username + "\t" + userList[i].password + "\t" + userList[i].type + "\t" + userList[i].permission);
+      if (userList[i].avatarUrl.length() > 0 && userList[i].avatarUrl != "/images/user.png") {
+        saveAvatarToFS(userList[i].username, userList[i].avatarUrl);
+      }
     }
     f.close();
   }
@@ -233,7 +340,8 @@ void loadUsersFromFS() {
       // Filter out old removed users if present in file
       if (u == "Sarah_Chen" || u == "Alex_Rivera") continue;
 
-      userList[userCount++] = { u, p, t, perm };
+      String av = loadAvatarFromFS(u);
+      userList[userCount++] = { u, p, t, perm, av };
     }
   }
   f.close();
@@ -489,11 +597,21 @@ void loadSchedulesFromFS() {
   }
 }
 
-void addOrUpdateSchedule(String id, String label, String role, String time, String days, String startTime, String endTime, String status) {
+void addOrUpdateSchedule(String id, String label, String role, String time, String days, String startTime, String endTime, String status, String dayConfigsJson = "") {
   if (id.length() == 0) id = String(millis());
+  if (status.length() == 0) status = "active";
+  if (days.length() == 0) days = "Mon,Tue,Wed,Thu,Fri";
+  if (startTime.length() == 0) startTime = "09:00 AM";
+  if (endTime.length() == 0) endTime = "05:00 PM";
+  if (role.length() == 0) role = "user";
+
+  if (dayConfigsJson.length() > 0) {
+    saveDayConfigsToFS(id, dayConfigsJson);
+  }
+
   for (int i = 0; i < scheduleCount; i++) {
-    if (scheduleList[i].id == id) {
-      scheduleList[i] = { id, label, role, time, days, startTime, endTime, status };
+    if (scheduleList[i].id == id || scheduleList[i].label.equalsIgnoreCase(label)) {
+      scheduleList[i] = { scheduleList[i].id, label, role, time, days, startTime, endTime, status };
       saveSchedulesToFS();
       return;
     }
@@ -513,10 +631,27 @@ void removeSchedule(String id) {
     }
   }
   if (idx >= 0) {
+    LittleFS.remove("/daycfg_" + id + ".json");
     for (int i = idx; i < scheduleCount - 1; i++) {
       scheduleList[i] = scheduleList[i + 1];
     }
     scheduleCount--;
+    saveSchedulesToFS();
+  }
+}
+
+void removeScheduleByLabel(String label) {
+  bool changed = false;
+  for (int i = scheduleCount - 1; i >= 0; i--) {
+    if (scheduleList[i].label.equalsIgnoreCase(label)) {
+      for (int j = i; j < scheduleCount - 1; j++) {
+        scheduleList[j] = scheduleList[j + 1];
+      }
+      scheduleCount--;
+      changed = true;
+    }
+  }
+  if (changed) {
     saveSchedulesToFS();
   }
 }
@@ -664,11 +799,13 @@ String buildSyncJson() {
   for (int i = 0; i < userCount; i++) {
     if (i > 0) json += ",";
     bool online = (userLastSeen[i] > 0 && (millis() - userLastSeen[i] < 15000));
+    String av = userList[i].avatarUrl;
+    if (av.length() == 0) av = "/images/user.png";
     json += "{";
     json += "\"username\":\"" + userList[i].username + "\",";
     json += "\"password\":\"" + userList[i].password + "\",";
     json += "\"type\":\"" + userList[i].type + "\",";
-    json += "\"avatarUrl\":\"/images/user.png\",";
+    json += "\"avatarUrl\":\"" + av + "\",";
     json += "\"permission\":\"" + userList[i].permission + "\",";
     json += "\"time\":[0,1440],";
     json += "\"isOnline\":" + String(online ? "true" : "false") + ",";
@@ -705,7 +842,29 @@ String buildSyncJson() {
     json += "],";
     json += "\"startTime\":\"" + scheduleList[i].startTime + "\",";
     json += "\"endTime\":\"" + scheduleList[i].endTime + "\",";
-    json += "\"status\":\"" + scheduleList[i].status + "\"";
+    json += "\"status\":\"" + scheduleList[i].status + "\",";
+    
+    // Output dayConfigs for day-by-day persistence
+    String savedDayCfg = loadDayConfigsFromFS(scheduleList[i].id);
+    if (savedDayCfg.length() > 0) {
+      json += "\"dayConfigs\":" + savedDayCfg;
+    } else {
+      json += "\"dayConfigs\":{";
+      const char* allDayShorts[7] = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
+      bool is24 = (scheduleList[i].time.indexOf("24/7") >= 0 || scheduleList[i].time.indexOf("Unlimited") >= 0 || (scheduleList[i].startTime == "12:00 AM" && scheduleList[i].endTime == "11:59 PM"));
+      for (int d = 0; d < 7; d++) {
+        if (d > 0) json += ",";
+        bool dayEn = (scheduleList[i].days.indexOf(allDayShorts[d]) >= 0);
+        json += "\"" + String(allDayShorts[d]) + "\":{";
+        json += "\"enabled\":" + String(dayEn ? "true" : "false") + ",";
+        json += "\"is24Hours\":" + String(is24 ? "true" : "false") + ",";
+        json += "\"startTime\":\"" + scheduleList[i].startTime + "\",";
+        json += "\"endTime\":\"" + scheduleList[i].endTime + "\"";
+        json += "}";
+      }
+      json += "}";
+    }
+
     json += "}";
   }
   json += "],";
@@ -898,6 +1057,8 @@ void handleEmergency(String msg) {
 // -------------------------------------------------------------
 // WebSocket Event Handler
 // -------------------------------------------------------------
+String wsIncomingBuffer = "";
+
 void onEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventType type, void * arg, uint8_t *data, size_t len) {
   if (type == WS_EVT_CONNECT) {
     os_printf("Client #%u connected to SmartLock\n", client->id());
@@ -909,22 +1070,31 @@ void onEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventTyp
   } 
   else if (type == WS_EVT_DATA) {
     AwsFrameInfo * info = (AwsFrameInfo*)arg;
-    if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
-      data[len] = 0;
-      String msg = String((char*)data);
-      msg.trim();
-
-      // Update user presence whenever a message with username arrives
-      String senderUser = extractJsonString(msg, "username");
-      if (senderUser.length() > 0) {
-        updateUserHeartbeat(senderUser, true);
+    if (info->opcode == WS_TEXT) {
+      if (info->index == 0) {
+        wsIncomingBuffer = "";
+      }
+      for (size_t i = 0; i < len; i++) {
+        wsIncomingBuffer += (char)data[i];
       }
 
-      // 1. Periodic poll or auth sync from app
-      if (msg.indexOf("\"type\":\"POLL_REQUEST\"") >= 0 || msg == "update") {
-        client->text(buildSyncJson());
-        return;
-      }
+      if (info->final || (info->index + len >= info->len)) {
+        String msg = wsIncomingBuffer;
+        wsIncomingBuffer = "";
+        msg.trim();
+        if (msg.length() == 0) return;
+
+        // Update user presence whenever a message with username arrives
+        String senderUser = extractJsonString(msg, "username");
+        if (senderUser.length() > 0) {
+          updateUserHeartbeat(senderUser, true);
+        }
+
+        // 1. Periodic poll or auth sync from app
+        if (msg.indexOf("\"type\":\"POLL_REQUEST\"") >= 0 || msg == "update") {
+          client->text(buildSyncJson());
+          return;
+        }
 
       // User presence status (login/logout/heartbeat)
       if (msg.indexOf("\"type\":\"USER_PRESENCE\"") >= 0) {
@@ -1004,13 +1174,30 @@ void onEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventTyp
             if (u.length() > 0) {
               addUser(u, p.length() > 0 ? p : "user", t.length() > 0 ? t : "user", perm.length() > 0 ? perm : "Standard User Access");
             }
+          } else if (action == "update_avatar") {
+            String u = extractJsonString(msg, "username");
+            String av = extractJsonString(msg, "avatarUrl");
+            if (u.length() > 0 && av.length() > 0) {
+              for (int i = 0; i < userCount; i++) {
+                if (userList[i].username.equalsIgnoreCase(u)) {
+                  userList[i].avatarUrl = av;
+                  saveAvatarToFS(u, av);
+                  break;
+                }
+              }
+            }
           } else if (action == "update") {
             String u = extractJsonString(msg, "username");
             String p = extractJsonString(msg, "password");
-            if (u.length() > 0 && p.length() > 0) {
+            String av = extractJsonString(msg, "avatarUrl");
+            if (u.length() > 0) {
               for (int i = 0; i < userCount; i++) {
                 if (userList[i].username.equalsIgnoreCase(u)) {
-                  userList[i].password = p;
+                  if (p.length() > 0) userList[i].password = p;
+                  if (av.length() > 0) {
+                    userList[i].avatarUrl = av;
+                    saveAvatarToFS(u, av);
+                  }
                   saveUsersToFS();
                   break;
                 }
@@ -1028,17 +1215,23 @@ void onEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventTyp
             String sLbl = extractJsonString(msg, "label");
             String sRole = extractJsonString(msg, "role");
             String sTime = extractJsonString(msg, "time");
-            String sDays = extractJsonString(msg, "days");
+            String sDays = extractDaysString(msg);
             String sStart = extractJsonString(msg, "startTime");
             String sEnd = extractJsonString(msg, "endTime");
             String sStat = extractJsonString(msg, "status");
+            String sDayConfigs = extractDayConfigsJson(msg);
             if (sId.length() == 0) sId = String(millis());
+            if (sRole.length() == 0) sRole = "user";
             if (sStat.length() == 0) sStat = "active";
-            addOrUpdateSchedule(sId, sLbl, sRole, sTime, sDays, sStart, sEnd, sStat);
+            addOrUpdateSchedule(sId, sLbl, sRole, sTime, sDays, sStart, sEnd, sStat, sDayConfigs);
           } else if (action == "delete") {
             String sId = extractJsonString(msg, "id");
+            String sLbl = extractJsonString(msg, "label");
             if (sId.length() > 0) {
               removeSchedule(sId);
+            }
+            if (sLbl.length() > 0) {
+              removeScheduleByLabel(sLbl);
             }
           }
         } else if (entity == "labNotes") {

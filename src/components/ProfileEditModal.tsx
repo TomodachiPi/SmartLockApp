@@ -65,13 +65,48 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
     }
   };
 
+  const compressImage = (dataUrl: string, callback: (compressed: string) => void) => {
+    const img = new Image();
+    img.onload = () => {
+      const maxDim = 80;
+      let width = img.width;
+      let height = img.height;
+      if (width > height) {
+        if (width > maxDim) {
+          height = Math.round((height * maxDim) / width);
+          width = maxDim;
+        }
+      } else {
+        if (height > maxDim) {
+          width = Math.round((width * maxDim) / height);
+          height = maxDim;
+        }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(img, 0, 0, width, height);
+        const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.75);
+        callback(compressedDataUrl);
+      } else {
+        callback(dataUrl);
+      }
+    };
+    img.onerror = () => callback(dataUrl);
+    img.src = dataUrl;
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
         if (typeof reader.result === 'string') {
-          setSelectedPhoto(reader.result);
+          compressImage(reader.result, (compressed) => {
+            setSelectedPhoto(compressed);
+          });
         }
       };
       reader.readAsDataURL(file);
@@ -80,12 +115,14 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
 
   const handleSavePhoto = () => {
     if (!selectedPhoto) return;
-    updateAvatar(selectedPhoto);
-    setPhotoSuccess(true);
-    setTimeout(() => {
-      setPhotoSuccess(false);
-      onClose();
-    }, 1200);
+    compressImage(selectedPhoto, (finalPhoto) => {
+      updateAvatar(finalPhoto);
+      setPhotoSuccess(true);
+      setTimeout(() => {
+        setPhotoSuccess(false);
+        onClose();
+      }, 1200);
+    });
   };
 
   return (

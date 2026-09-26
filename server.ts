@@ -11,7 +11,8 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
 
-app.use(express.json());
+app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ limit: '15mb', extended: true }));
 
 // In-Memory Shared State (representing the ESP8266 / centralized smart lock unit state)
 let smartLockState = {
@@ -487,9 +488,22 @@ wss.on('connection', (ws) => {
 
           if (entity === 'profiles') {
             if (action === 'create') {
-              profiles = [...profiles, payload];
-            } else if (action === 'update') {
-              profiles = profiles.map((p) => p.username.toLowerCase() === payload.username.toLowerCase() ? { ...p, ...payload } : p);
+              profiles = [...profiles.filter((p) => p.username.toLowerCase() !== payload.username.toLowerCase()), payload];
+            } else if (action === 'update_avatar' || action === 'update') {
+              const uName = (payload?.username || parsed.username || '').toLowerCase();
+              const avUrl = payload?.avatarUrl || parsed.avatarUrl;
+              if (uName) {
+                profiles = profiles.map((p) => {
+                  if (p.username.toLowerCase() === uName) {
+                    return {
+                      ...p,
+                      ...(payload || {}),
+                      avatarUrl: avUrl || payload?.avatarUrl || p.avatarUrl || '/images/user.png',
+                    };
+                  }
+                  return p;
+                });
+              }
             } else if (action === 'delete') {
               const uName = (payload.username || '').toLowerCase();
               if (uName && uName !== 'administrator') {
@@ -514,7 +528,7 @@ wss.on('connection', (ws) => {
                   password: userPass,
                   type: userType,
                   time: userTime,
-                  avatarUrl: '/images/user.png',
+                  avatarUrl: payload.avatarUrl || '/images/user.png',
                   permission: userType === 'admin' ? 'Admin Privilege' : 'Standard User Access',
                   joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
                   isOnline: false,
@@ -526,13 +540,31 @@ wss.on('connection', (ws) => {
               profileRequests = profileRequests.filter((r) => r.username.toLowerCase() !== payload.username.toLowerCase());
             }
           } else if (entity === 'schedules') {
+            const schedObj = payload || {
+              id: parsed.id,
+              label: parsed.label,
+              role: parsed.role,
+              time: parsed.time,
+              days: parsed.daysArray || (parsed.days ? parsed.days.split(',') : []),
+              startTime: parsed.startTime,
+              endTime: parsed.endTime,
+              status: parsed.status,
+              dayConfigs: parsed.dayConfigs,
+            };
             if (action === 'create') {
-              const newSched = { ...payload, id: payload.id || Date.now().toString() };
-              userSchedules = [...userSchedules.filter((s) => s.id !== newSched.id), newSched];
+              const newSched = { ...schedObj, id: schedObj.id || Date.now().toString() };
+              userSchedules = [...userSchedules.filter((s) => s.id !== newSched.id && s.label.toLowerCase() !== newSched.label.toLowerCase()), newSched];
             } else if (action === 'update') {
-              userSchedules = userSchedules.map((s) => s.id === payload.id ? { ...s, ...payload } : s);
+              const exists = userSchedules.some((s) => s.id === schedObj.id || s.label.toLowerCase() === schedObj.label.toLowerCase());
+              if (exists) {
+                userSchedules = userSchedules.map((s) => (s.id === schedObj.id || s.label.toLowerCase() === schedObj.label.toLowerCase() ? { ...s, ...schedObj } : s));
+              } else {
+                userSchedules = [...userSchedules, schedObj];
+              }
             } else if (action === 'delete') {
-              userSchedules = userSchedules.filter((s) => s.id !== payload.id);
+              const targetId = schedObj.id || parsed.id;
+              const targetLabel = schedObj.label || parsed.label;
+              userSchedules = userSchedules.filter((s) => s.id !== targetId && (!targetLabel || s.label.toLowerCase() !== targetLabel.toLowerCase()));
             }
           } else if (entity === 'labNotes') {
             if (action === 'create') {
@@ -615,6 +647,49 @@ app.get('/api/health', (_req, res) => {
 
 app.get('/api/state', (_req, res) => {
   res.json(buildSyncPayload());
+});
+
+app.get('/api/profiles', (_req, res) => {
+  res.json(getSyncedProfiles());
+});
+
+app.post('/api/profiles/avatar', (req, res) => {
+  const { username, avatarUrl } = req.body;
+  if (!username || !avatarUrl) {
+    res.status(400).json({ error: 'Missing username or avatarUrl' });
+    return;
+  }
+
+  const uName = String(username).trim().toLowerCase();
+  let updated = false;
+  profiles = profiles.map((p) => {
+    if (p.username.toLowerCase() === uName) {
+      updated = true;
+      return {
+        ...p,
+        avatarUrl,
+      };
+    }
+    return p;
+  });
+
+  if (!updated) {
+    // If not found in current list, create minimal profile
+    profiles.push({
+      username: String(username).trim(),
+      password: 'user',
+      type: 'user',
+      avatarUrl,
+      permission: 'Standard User Access',
+      joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      isOnline: true,
+      lastActive: 'Active now',
+    });
+  }
+
+  // Broadcast to all WebSocket connected devices immediately
+  broadcast(buildSyncPayload());
+  res.json({ success: true, avatarUrl });
 });
 
 // Mount Vite in dev mode or serve static files in prod

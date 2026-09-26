@@ -115,7 +115,11 @@ export const AccessCard: React.FC<AccessCardProps> = ({
                     return (
                       <span
                         key={day}
-                        className={'px-2 py-0.5 rounded text-[10px] font-mono font-bold border transition-colors bg-[#1e293b] text-slate-400 border-slate-700'}
+                        className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border transition-colors ${
+                          isToday
+                            ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40 font-black'
+                            : 'bg-[#1e293b] text-slate-400 border-slate-700'
+                        }`}
                       >
                         {day}
                       </span>

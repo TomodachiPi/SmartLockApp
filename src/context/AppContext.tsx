@@ -114,6 +114,149 @@ export function parseTimeToMinutes(tStr: string): number | null {
   return h * 60 + m;
 }
 
+export function isScheduleCurrentlyActive(
+  schedule: Partial<UserSchedule> | null | undefined,
+  role?: 'admin' | 'user'
+): boolean {
+  if (!schedule) return false;
+  const effectiveRole = role || schedule.role;
+  if (effectiveRole === 'admin' || (schedule.label && schedule.label.toLowerCase() === 'administrator')) {
+    return true; // Administrators have 24/7 access clearance
+  }
+  if (schedule.status === 'restricted') {
+    return false;
+  }
+
+  const now = new Date();
+  const dayNamesShort = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const dayNamesFull = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const dayIdx = now.getDay();
+  const currentShort = dayNamesShort[dayIdx];
+  const currentFull = dayNamesFull[dayIdx];
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+  // 1. Per-day custom dayConfigs evaluation
+  if (schedule.dayConfigs && typeof schedule.dayConfigs === 'object' && Object.keys(schedule.dayConfigs).length > 0) {
+    const todayKey = Object.keys(schedule.dayConfigs).find(
+      (k) => k.toLowerCase() === currentShort.toLowerCase() || k.toLowerCase() === currentFull.toLowerCase()
+    );
+    if (!todayKey) return false;
+    const dayConfig = schedule.dayConfigs[todayKey];
+    if (!dayConfig || !dayConfig.enabled) return false;
+    if (dayConfig.is24Hours) return true;
+
+    const startM = dayConfig.startTime ? parseTimeToMinutes(dayConfig.startTime) : null;
+    const endM = dayConfig.endTime ? parseTimeToMinutes(dayConfig.endTime) : null;
+
+    if (startM !== null && endM !== null) {
+      if (endM >= startM) {
+        return currentMinutes >= startM && currentMinutes <= endM;
+      } else {
+        return currentMinutes >= startM || currentMinutes <= endM;
+      }
+    }
+    return false;
+  }
+
+  // 2. Standard days array & time string evaluation
+  const timeStr = (schedule.time || '').toLowerCase();
+  const is24_7 =
+    timeStr.includes('24/7') ||
+    timeStr.includes('any time') ||
+    timeStr.includes('unlimited access') ||
+    (schedule.startTime === '12:00 AM' && schedule.endTime === '11:59 PM');
+
+  let dayMatches = false;
+  if (Array.isArray(schedule.days) && schedule.days.length > 0) {
+    dayMatches = schedule.days.some((d) => {
+      if (!d || typeof d !== 'string') return false;
+      const dClean = d.trim().toLowerCase();
+      if (dClean === currentShort.toLowerCase() || dClean === currentFull.toLowerCase()) return true;
+      if (dClean.startsWith(currentShort.toLowerCase())) return true;
+      if (dClean === 'all' || dClean.includes('all days') || dClean.includes('everyday')) return true;
+      if (dClean.includes('weekday') && dayIdx >= 1 && dayIdx <= 5) return true;
+      if (dClean.includes('weekend') && (dayIdx === 0 || dayIdx === 6)) return true;
+      return false;
+    });
+  } else if (typeof schedule.days === 'string' && (schedule.days as string).trim().length > 0) {
+    const dList = (schedule.days as string).split(',').map((s) => s.trim().toLowerCase());
+    dayMatches = dList.some((d) => d.startsWith(currentShort.toLowerCase()) || d === currentShort.toLowerCase());
+  } else {
+    if (
+      timeStr.includes('monday to sunday') ||
+      timeStr.includes('mon-sun') ||
+      timeStr.includes('all days') ||
+      timeStr.includes('daily') ||
+      timeStr.includes('everyday')
+    ) {
+      dayMatches = true;
+    } else if (
+      (timeStr.includes('mon-fri') ||
+        timeStr.includes('monday to friday') ||
+        timeStr.includes('weekdays')) &&
+      dayIdx >= 1 &&
+      dayIdx <= 5
+    ) {
+      dayMatches = true;
+    } else if (
+      (timeStr.includes('weekends') || timeStr.includes('sat-sun') || timeStr.includes('sat & sun')) &&
+      (dayIdx === 0 || dayIdx === 6)
+    ) {
+      dayMatches = true;
+    } else {
+      dayMatches = timeStr.includes(currentShort.toLowerCase()) || timeStr.includes(currentFull.toLowerCase());
+    }
+  }
+
+  if (!dayMatches) return false;
+  if (is24_7) return true;
+
+  let startM: number | null = null;
+  let endM: number | null = null;
+
+  if (schedule.startTime && schedule.endTime) {
+    startM = parseTimeToMinutes(schedule.startTime);
+    endM = parseTimeToMinutes(schedule.endTime);
+  } else if (schedule.time) {
+    const rangeMatch = schedule.time.match(
+      /(\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)\s*(?:to|-)\s*(\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)/i
+    );
+    if (rangeMatch) {
+      startM = parseTimeToMinutes(rangeMatch[1]);
+      endM = parseTimeToMinutes(rangeMatch[2]);
+    }
+  }
+
+  if (startM !== null && endM !== null) {
+    if (endM >= startM) {
+      return currentMinutes >= startM && currentMinutes <= endM;
+    } else {
+      return currentMinutes >= startM || currentMinutes <= endM;
+    }
+  }
+
+  return false;
+}
+
+export function isUserScheduleActiveNow(
+  user: Profile | null,
+  schedules: UserSchedule[]
+): boolean {
+  if (!user) return false;
+  if (user.type === 'admin') return true; // Admins have 24/7 master clearance
+
+  const userSchedules = schedules.filter(
+    (s) => s.label.toLowerCase() === user.username.toLowerCase()
+  );
+
+  // Non-admin users MUST have an explicit access schedule configured
+  if (userSchedules.length === 0) {
+    return false;
+  }
+
+  return userSchedules.some((schedule) => isScheduleCurrentlyActive(schedule, user.type));
+}
+
 const defaultSchedules: UserSchedule[] = [
   {
     id: '1',
@@ -164,140 +307,6 @@ function formatTimeAndDate(d = new Date()) {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const dateStr = `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
   return { timeStr, dateStr };
-}
-
-export function isUserScheduleActiveNow(
-  user: Profile | null,
-  schedules: UserSchedule[]
-): boolean {
-  if (!user) return false;
-  if (user.type === 'admin') return true; // Admins have 24/7 master clearance
-
-  const userSchedules = schedules.filter(
-    (s) => s.label.toLowerCase() === user.username.toLowerCase()
-  );
-
-  // Non-admin users MUST have an explicit access schedule configured
-  if (userSchedules.length === 0) {
-    return false;
-  }
-
-  const now = new Date();
-  const dayNamesShort = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const dayNamesFull = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  const dayIdx = now.getDay();
-  const currentShort = dayNamesShort[dayIdx];
-  const currentFull = dayNamesFull[dayIdx];
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
-  return userSchedules.some((schedule) => {
-    if (schedule.status === 'restricted') return false;
-
-    // Check if per-day custom configs exist
-    if (schedule.dayConfigs && Object.keys(schedule.dayConfigs).length > 0) {
-      const todayKey = Object.keys(schedule.dayConfigs).find(
-        (k) => k.toLowerCase() === currentShort.toLowerCase() || k.toLowerCase() === currentFull.toLowerCase()
-      );
-
-      if (!todayKey) return false;
-      const dayConfig = schedule.dayConfigs[todayKey];
-      if (!dayConfig || !dayConfig.enabled) return false;
-      if (dayConfig.is24Hours) return true;
-
-      const startM = dayConfig.startTime ? parseTimeToMinutes(dayConfig.startTime) : null;
-      const endM = dayConfig.endTime ? parseTimeToMinutes(dayConfig.endTime) : null;
-
-      if (startM !== null && endM !== null) {
-        if (endM >= startM) {
-          return currentMinutes >= startM && currentMinutes <= endM;
-        } else {
-          return currentMinutes >= startM || currentMinutes <= endM;
-        }
-      }
-      return true;
-    }
-
-    // Fallback: Legacy days & time format
-    const timeStr = (schedule.time || '').toLowerCase();
-    const is24_7 = timeStr.includes('24/7') || timeStr.includes('any time') || timeStr.includes('unlimited access');
-
-    let dayMatches = false;
-    if (schedule.days && schedule.days.length > 0) {
-      dayMatches = schedule.days.some((d) => {
-        const dClean = d.trim().toLowerCase();
-        if (dClean === currentShort.toLowerCase() || dClean === currentFull.toLowerCase()) return true;
-        if (dClean.startsWith(currentShort.toLowerCase())) return true;
-        if (dClean === 'all' || dClean.includes('all days') || dClean.includes('everyday')) return true;
-        if (dClean.includes('weekday') && dayIdx >= 1 && dayIdx <= 5) return true;
-        if (dClean.includes('weekend') && (dayIdx === 0 || dayIdx === 6)) return true;
-        return false;
-      });
-    } else {
-      if (
-        timeStr.includes('monday to sunday') ||
-        timeStr.includes('mon-sun') ||
-        timeStr.includes('all days') ||
-        timeStr.includes('daily') ||
-        timeStr.includes('everyday')
-      ) {
-        dayMatches = true;
-      } else if (
-        (timeStr.includes('mon-fri') ||
-          timeStr.includes('monday to friday') ||
-          timeStr.includes('weekdays')) &&
-        dayIdx >= 1 &&
-        dayIdx <= 5
-      ) {
-        dayMatches = true;
-      } else if (
-        (timeStr.includes('weekends') || timeStr.includes('sat-sun') || timeStr.includes('sat & sun')) &&
-        (dayIdx === 0 || dayIdx === 6)
-      ) {
-        dayMatches = true;
-      } else if (
-        timeStr.includes(currentFull.toLowerCase()) ||
-        timeStr.includes(currentShort.toLowerCase())
-      ) {
-        dayMatches = true;
-      } else {
-        const mentionsOtherDays = dayNamesFull.some(
-          (fullDay, idx) =>
-            idx !== dayIdx &&
-            (timeStr.includes(fullDay.toLowerCase()) || timeStr.includes(dayNamesShort[idx].toLowerCase()))
-        );
-        dayMatches = !mentionsOtherDays && (dayIdx >= 1 && dayIdx <= 5);
-      }
-    }
-
-    if (!dayMatches) return false;
-    if (is24_7) return true;
-
-    let startM: number | null = null;
-    let endM: number | null = null;
-
-    if (schedule.startTime && schedule.endTime) {
-      startM = parseTimeToMinutes(schedule.startTime);
-      endM = parseTimeToMinutes(schedule.endTime);
-    } else if (schedule.time) {
-      const rangeMatch = schedule.time.match(
-        /(\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)\s*(?:to|-)\s*(\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)/i
-      );
-      if (rangeMatch) {
-        startM = parseTimeToMinutes(rangeMatch[1]);
-        endM = parseTimeToMinutes(rangeMatch[2]);
-      }
-    }
-
-    if (startM !== null && endM !== null) {
-      if (endM >= startM) {
-        return currentMinutes >= startM && currentMinutes <= endM;
-      } else {
-        return currentMinutes >= startM || currentMinutes <= endM;
-      }
-    }
-
-    return true;
-  });
 }
 
 function getDefaultWsUrl(): string {
@@ -476,6 +485,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const currentUserRef = useRef(currentUser);
   const initialLockTimeRef = useRef<number | null>(null);
   const simTimerRef = useRef<any>(null);
+  const localScheduleModTimestampsRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
     lockedRef.current = locked;
@@ -657,7 +667,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const cleanProfiles = parsed.profiles.filter(
           (p: any) => p.username !== 'Sarah_Chen' && p.username !== 'Alex_Rivera'
         );
-        setProfiles(cleanProfiles);
+        setProfiles((prevProfiles) => {
+          return cleanProfiles.map((incProf: Profile) => {
+            const localProf = prevProfiles.find(
+              (lp) => lp.username.toLowerCase() === incProf.username.toLowerCase()
+            );
+            const avatarUrl =
+              incProf.avatarUrl && incProf.avatarUrl !== '/images/user.png'
+                ? incProf.avatarUrl
+                : localProf?.avatarUrl || incProf.avatarUrl || user_png;
+
+            return {
+              ...incProf,
+              avatarUrl,
+            };
+          });
+        });
+
+        // Also update currentUser avatar if it matches
+        if (currentUserRef.current) {
+          const match = cleanProfiles.find(
+            (p: Profile) => p.username.toLowerCase() === currentUserRef.current?.username.toLowerCase()
+          );
+          if (match && match.avatarUrl && match.avatarUrl !== '/images/user.png' && match.avatarUrl !== currentUserRef.current.avatarUrl) {
+            setCurrentUser((prev) => {
+              if (!prev) return prev;
+              const updated = { ...prev, avatarUrl: match.avatarUrl };
+              try {
+                localStorage.setItem('current_user', JSON.stringify(updated));
+              } catch {}
+              return updated;
+            });
+          }
+        }
       }
       if (Array.isArray(parsed.profileRequests)) {
         setProfileRequests(parsed.profileRequests);
@@ -666,7 +708,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const cleanSchedules = parsed.userSchedules.filter(
           (s: any) => s.label !== 'Sarah_Chen' && s.label !== 'Alex_Rivera'
         );
-        setUserSchedules(cleanSchedules);
+        const incomingMsgTimestamp = parsed.timestamp || 0;
+        const now = Date.now();
+
+        setUserSchedules((prevSchedules) => {
+          const merged = [...prevSchedules];
+
+          cleanSchedules.forEach((incomingSched: UserSchedule) => {
+            const labelKey = (incomingSched.label || '').toLowerCase();
+            const idKey = incomingSched.id;
+            const lastLocalMod = Math.max(
+              localScheduleModTimestampsRef.current.get(labelKey) || 0,
+              localScheduleModTimestampsRef.current.get(idKey) || 0
+            );
+
+            // If we recently updated this schedule locally (within last 15s) and the incoming message is older, retain the local state!
+            const isRecentlyEditedLocally = now - lastLocalMod < 15000;
+            const existingIdx = merged.findIndex(
+              (s) => s.id === incomingSched.id || s.label.toLowerCase() === labelKey
+            );
+
+            if (existingIdx >= 0) {
+              const localSched = merged[existingIdx];
+              if (isRecentlyEditedLocally && incomingMsgTimestamp < lastLocalMod) {
+                // Keep locally updated schedule to prevent polling reverts
+                return;
+              }
+
+              merged[existingIdx] = {
+                ...incomingSched,
+                // Preserve dayConfigs if local has custom configured days and incoming doesn't or is generic
+                dayConfigs:
+                  incomingSched.dayConfigs && Object.keys(incomingSched.dayConfigs).length > 0
+                    ? incomingSched.dayConfigs
+                    : localSched.dayConfigs,
+              };
+            } else {
+              merged.push(incomingSched);
+            }
+          });
+
+          return merged;
+        });
       }
       if (Array.isArray(parsed.roomTransfers)) {
         setRoomTransfers(parsed.roomTransfers);
@@ -1428,7 +1511,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!currentUser) return;
     const updatedUser = { ...currentUser, avatarUrl };
     setCurrentUser(updatedUser);
-    setProfiles((prev) => prev.map((p) => (p.username === currentUser.username ? updatedUser : p)));
+    setProfiles((prev) =>
+      prev.map((p) =>
+        p.username.toLowerCase() === currentUser.username.toLowerCase() ? updatedUser : p
+      )
+    );
+
+    // Save locally
+    try {
+      localStorage.setItem('current_user', JSON.stringify(updatedUser));
+      const existingUsers: Profile[] = JSON.parse(localStorage.getItem('user_data') || '[]');
+      const savedProfiles = existingUsers.some((p) => p.username.toLowerCase() === currentUser.username.toLowerCase())
+        ? existingUsers.map((p) => (p.username.toLowerCase() === currentUser.username.toLowerCase() ? updatedUser : p))
+        : [...existingUsers, updatedUser];
+      localStorage.setItem('user_data', JSON.stringify(savedProfiles));
+    } catch {}
+
+    // Dispatch WebSocket sync to ESP8266 & server
+    sendWsJson({
+      type: 'DATA_UPDATE_ACTION',
+      entity: 'profiles',
+      action: 'update_avatar',
+      username: currentUser.username,
+      avatarUrl: avatarUrl,
+      payload: {
+        username: currentUser.username,
+        avatarUrl: avatarUrl,
+      },
+      timestamp: Date.now(),
+    });
+
+    // Also notify REST backend for multi-client replication
+    try {
+      fetch('/api/profiles/avatar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: currentUser.username,
+          avatarUrl: avatarUrl,
+        }),
+      }).catch(() => {});
+    } catch {}
   };
 
   const adminCreateUser = (userData: Omit<Profile, 'joinedDate'>): { success: boolean; error?: string } => {
@@ -1520,38 +1643,120 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Schedule Management
   const addSchedule = (sched: Omit<UserSchedule, 'id'>) => {
     const newSched: UserSchedule = { ...sched, id: Date.now().toString() };
-    setUserSchedules((prev) => [...prev, newSched]);
+    const now = Date.now();
+    localScheduleModTimestampsRef.current.set((newSched.label || '').toLowerCase(), now);
+    localScheduleModTimestampsRef.current.set(newSched.id, now);
+
+    setUserSchedules((prev) => {
+      const exists = prev.some((s) => s.id === newSched.id || s.label.toLowerCase() === newSched.label.toLowerCase());
+      if (exists) {
+        return prev.map((s) => (s.id === newSched.id || s.label.toLowerCase() === newSched.label.toLowerCase() ? newSched : s));
+      }
+      return [...prev, newSched];
+    });
+
+    try {
+      const existing = JSON.parse(localStorage.getItem('user_schedules') || '[]');
+      const filtered = existing.filter((s: any) => s.label.toLowerCase() !== newSched.label.toLowerCase());
+      localStorage.setItem('user_schedules', JSON.stringify([...filtered, newSched]));
+    } catch {}
+
     addWsLog('send', `[ESP8266 IoT] New access policy dispatched for "${newSched.label}" (${newSched.time})`);
+    
+    const daysStr = Array.isArray(newSched.days) ? newSched.days.join(',') : newSched.days;
     sendWsJson({
       type: 'DATA_UPDATE_ACTION',
       entity: 'schedules',
       action: 'create',
-      payload: newSched,
+      id: newSched.id,
+      label: newSched.label,
+      role: newSched.role,
+      time: newSched.time,
+      days: daysStr,
+      daysArray: newSched.days,
+      startTime: newSched.startTime,
+      endTime: newSched.endTime,
+      status: newSched.status,
+      dayConfigs: newSched.dayConfigs,
+      payload: {
+        ...newSched,
+        days: newSched.days,
+        daysStr,
+      },
       timestamp: Date.now(),
     });
   };
 
   const updateSchedule = (sched: UserSchedule) => {
-    setUserSchedules((prev) => prev.map((s) => (s.id === sched.id ? sched : s)));
+    const now = Date.now();
+    localScheduleModTimestampsRef.current.set((sched.label || '').toLowerCase(), now);
+    localScheduleModTimestampsRef.current.set(sched.id, now);
+
+    setUserSchedules((prev) => {
+      const exists = prev.some((s) => s.id === sched.id || s.label.toLowerCase() === sched.label.toLowerCase());
+      if (exists) {
+        return prev.map((s) => (s.id === sched.id || s.label.toLowerCase() === sched.label.toLowerCase() ? { ...s, ...sched } : s));
+      }
+      return [...prev, sched];
+    });
+
+    try {
+      const existing = JSON.parse(localStorage.getItem('user_schedules') || '[]');
+      const updated = existing.some((s: any) => s.id === sched.id || s.label.toLowerCase() === sched.label.toLowerCase())
+        ? existing.map((s: any) => (s.id === sched.id || s.label.toLowerCase() === sched.label.toLowerCase() ? { ...s, ...sched } : s))
+        : [...existing, sched];
+      localStorage.setItem('user_schedules', JSON.stringify(updated));
+    } catch {}
+
     addWsLog('send', `[ESP8266 IoT] Access policy updated for "${sched.label}" (${sched.time})`);
+
+    const daysStr = Array.isArray(sched.days) ? sched.days.join(',') : sched.days;
     sendWsJson({
       type: 'DATA_UPDATE_ACTION',
       entity: 'schedules',
       action: 'update',
-      payload: sched,
+      id: sched.id,
+      label: sched.label,
+      role: sched.role,
+      time: sched.time,
+      days: daysStr,
+      daysArray: sched.days,
+      startTime: sched.startTime,
+      endTime: sched.endTime,
+      status: sched.status,
+      dayConfigs: sched.dayConfigs,
+      payload: {
+        ...sched,
+        days: sched.days,
+        daysStr,
+      },
       timestamp: Date.now(),
     });
   };
 
   const deleteSchedule = (id: string) => {
     const target = userSchedules.find((s) => s.id === id);
+    const targetLabel = target?.label || '';
+    const now = Date.now();
+    localScheduleModTimestampsRef.current.set(targetLabel.toLowerCase(), now);
+    localScheduleModTimestampsRef.current.set(id, now);
+
     setUserSchedules((prev) => prev.filter((s) => s.id !== id));
-    addWsLog('send', `[ESP8266 IoT] Access policy removed for "${target?.label || id}"`);
+
+    try {
+      const existing = JSON.parse(localStorage.getItem('user_schedules') || '[]');
+      const filtered = existing.filter((s: any) => s.id !== id);
+      localStorage.setItem('user_schedules', JSON.stringify(filtered));
+    } catch {}
+
+    addWsLog('send', `[ESP8266 IoT] Access policy removed for "${targetLabel || id}"`);
     sendWsJson({
       type: 'DATA_UPDATE_ACTION',
       entity: 'schedules',
       action: 'delete',
-      payload: { id },
+      id: id,
+      label: targetLabel,
+      payload: { id, label: targetLabel },
       timestamp: Date.now(),
     });
   };

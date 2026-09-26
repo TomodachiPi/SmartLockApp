@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Clock, Calendar, Edit3, Trash2, KeyRound, Shield, ChevronDown, ChevronUp } from 'lucide-react';
 import { DayScheduleConfig } from '../types';
+import { isScheduleCurrentlyActive } from '../context/AppContext';
 
 interface ScheduleCardProps {
   label: string;
@@ -31,6 +32,18 @@ export const ScheduleCard: React.FC<ScheduleCardProps> = ({
   const isRestricted = status === 'restricted';
   const isAdmin = role === 'admin';
   const [showDayBreakdown, setShowDayBreakdown] = useState(false);
+
+  const isCurrentlyInWindow = isScheduleCurrentlyActive(
+    {
+      label,
+      role,
+      time,
+      days,
+      dayConfigs,
+      status,
+    },
+    role
+  );
 
   const hasDayConfigs = dayConfigs && typeof dayConfigs === 'object' && Object.keys(dayConfigs).length > 0;
   const activeDaysList = hasDayConfigs
@@ -80,11 +93,24 @@ export const ScheduleCard: React.FC<ScheduleCardProps> = ({
                 className={`text-[9px] px-2 py-0.5 rounded-md font-mono uppercase tracking-wider font-bold border flex items-center gap-1 ${
                   isRestricted
                     ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
-                    : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                    : isCurrentlyInWindow
+                    ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                    : 'bg-slate-700/30 text-slate-400 border-slate-700'
                 }`}
               >
-                {!isRestricted && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
-                {isRestricted ? 'Restricted' : 'Active Window'}
+                {isRestricted ? (
+                  'Restricted'
+                ) : isCurrentlyInWindow ? (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>In Active Window</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+                    <span>Outside Window</span>
+                  </>
+                )}
               </span>
             </div>
           </div>
