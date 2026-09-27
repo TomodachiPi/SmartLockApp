@@ -296,14 +296,6 @@ export const SettingsScreen: React.FC = () => {
                     }}
                     className="w-16 h-16 rounded-full object-contain p-1.5 bg-slate-900 border-2 border-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.3)]"
                   />
-                  <button
-                    id="settings-edit-avatar-quick-btn"
-                    onClick={() => handleOpenEdit('icon')}
-                    className="absolute bottom-0 right-0 bg-cyan-500 text-slate-950 p-1.5 rounded-full hover:scale-110 transition-transform shadow cursor-pointer"
-                    title="Change profile icon"
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                  </button>
                 </div>
 
                 <div>

@@ -134,8 +134,8 @@ export const LockScreen: React.FC = () => {
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => setIsProfileModalOpen(true)}
-            className="relative group cursor-pointer focus:outline-none"
+            //onClick={() => setIsProfileModalOpen(true)}
+            className="relative group focus:outline-none"
             title="Edit profile icon"
           >
             <img
@@ -145,7 +145,7 @@ export const LockScreen: React.FC = () => {
                 e.currentTarget.onerror = null;
                 e.currentTarget.src = user_png;
               }}
-              className="w-11 h-11 rounded-full object-contain p-1 bg-slate-900 border-2 border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.35)] transition-transform group-hover:scale-105"
+              className="w-11 h-11 rounded-full object-contain p-1 bg-slate-900 border-2 border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.35)] transition-transform"
             />
             <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-400 border-2 border-[#0b0f19] shadow-[0_0_8px_#10b981]" />
           </button>

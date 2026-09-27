@@ -84,11 +84,13 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
   const handleSelectIcon = (index: number) => {
     setSelectedIconIndex(index);
     // Instantly persist the selected avatar icon index
+    /*
     updateAvatar(index);
     setIconSuccess(true);
     setTimeout(() => {
       setIconSuccess(false);
     }, 2500);
+    */
   };
 
   const handleSaveIcon = () => {
@@ -250,9 +252,7 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
                 </div>
               </div>
               <div className="flex-1 min-w-0">
-                <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-400 font-bold">
-                  Active Choice
-                </span>
+
                 <h4 className="text-sm font-bold text-white truncate">{currentOption.name}</h4>
                 <p className="text-xs text-slate-400 truncate">{currentOption.description}</p>
               </div>
@@ -261,7 +261,7 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
             {/* 10 Avatar Choices Grid */}
             <div>
               <label className="block text-xs font-mono font-bold text-slate-300 uppercase tracking-wider mb-2">
-                Choose an Icon ({AVATAR_ICONS.length} available):
+                Choose an Icon:
               </label>
               <div className="grid grid-cols-5 gap-2">
                 {AVATAR_ICONS.map((opt) => {
