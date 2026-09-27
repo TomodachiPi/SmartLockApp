@@ -20,6 +20,7 @@ import {
   Info,
 } from 'lucide-react';
 import user_png from '../assets/images/user.png';
+import { getAvatarByIndex } from '../data/avatarIcons';
 
 interface AccessScheduleModalProps {
   isOpen: boolean;
@@ -622,9 +623,9 @@ export const AccessScheduleModal: React.FC<AccessScheduleModalProps> = ({
                         }`}
                       >
                         <img
-                          src={p.avatarUrl || user_png}
+                          src={getAvatarByIndex(p.avatarIndex !== undefined ? p.avatarIndex : p.avatarUrl)}
                           alt={p.username}
-                          className="w-7 h-7 rounded-full object-cover border border-slate-700 shrink-0"
+                          className="w-7 h-7 rounded-full object-contain p-0.5 bg-slate-900 border border-slate-700 shrink-0"
                         />
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-1">

@@ -31,6 +31,7 @@ import {
 import locked_png from './../assets/images/locked.png';
 import unlocked_png from './../assets/images/unlocked.png';
 import user_png from './../assets/images/user.png';
+import { getAvatarByIndex } from '../data/avatarIcons';
 
 export const LockScreen: React.FC = () => {
   const {
@@ -135,16 +136,16 @@ export const LockScreen: React.FC = () => {
             type="button"
             onClick={() => setIsProfileModalOpen(true)}
             className="relative group cursor-pointer focus:outline-none"
-            title="Edit profile photo"
+            title="Edit profile icon"
           >
             <img
-              src={currentUser?.avatarUrl || user_png}
+              src={getAvatarByIndex(currentUser?.avatarIndex !== undefined ? currentUser.avatarIndex : currentUser?.avatarUrl)}
               alt="User Avatar"
               onError={(e) => {
                 e.currentTarget.onerror = null;
                 e.currentTarget.src = user_png;
               }}
-              className="w-11 h-11 rounded-full object-cover border-2 border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.35)] transition-transform group-hover:scale-105"
+              className="w-11 h-11 rounded-full object-contain p-1 bg-slate-900 border-2 border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.35)] transition-transform group-hover:scale-105"
             />
             <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-400 border-2 border-[#0b0f19] shadow-[0_0_8px_#10b981]" />
           </button>

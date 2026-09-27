@@ -3,6 +3,7 @@ export interface Profile {
   password: string;
   type: 'admin' | 'user';
   avatarUrl?: string;
+  avatarIndex?: number;
   time?: number[];
   permission?: string;
   schedule?: string;
@@ -16,6 +17,8 @@ export interface ProfileRequest {
   username: string;
   password: string;
   type: 'admin' | 'user';
+  avatarUrl?: string;
+  avatarIndex?: number;
   time: number[];
   requestedAt?: string;
   email?: string;

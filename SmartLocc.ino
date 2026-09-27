@@ -55,7 +55,8 @@ struct SmartLockUser {
   String password;
   String type;        // "admin" or "user"
   String permission;  // e.g. "Admin Privilege" or "Standard User Access"
-  String avatarUrl;   // Data URL or image path, stored in LittleFS
+  int avatarIndex;    // Selected icon index 0-9
+  String avatarUrl;   // String representation of index ("0" to "9")
 };
 
 struct SmartLockRequest {
@@ -184,29 +185,26 @@ String extractJsonString(String json, String key) {
 // -------------------------------------------------------------
 // User Management & LittleFS Persistence
 // -------------------------------------------------------------
-void saveAvatarToFS(String username, String avatarUrl) {
-  if (username.length() == 0) return;
-  String path = "/avatar_" + username + ".txt";
-  File f = LittleFS.open(path, "w");
-  if (f) {
-    f.print(avatarUrl);
-    f.close();
-  }
-}
-
-String loadAvatarFromFS(String username) {
-  if (username.length() == 0) return "/images/user.png";
-  String path = "/avatar_" + username + ".txt";
-  if (LittleFS.exists(path)) {
-    File f = LittleFS.open(path, "r");
-    if (f) {
-      String av = f.readString();
-      f.close();
-      av.trim();
-      if (av.length() > 0) return av;
+int extractAvatarIndex(String json) {
+  int idx = json.indexOf("\"avatarIndex\":");
+  if (idx < 0) idx = json.indexOf("\"avatarIndex\" :");
+  if (idx >= 0) {
+    int start = idx + 14;
+    while (start < json.length() && (json[start] == ' ' || json[start] == ':')) start++;
+    int end = start;
+    while (end < json.length() && json[end] >= '0' && json[end] <= '9') end++;
+    if (end > start) {
+      int val = json.substring(start, end).toInt();
+      if (val >= 0 && val <= 9) return val;
     }
   }
-  return "/images/user.png";
+  // Fallback to avatarUrl if index was passed as string "0" to "9"
+  String avStr = extractJsonString(json, "avatarUrl");
+  if (avStr.length() > 0) {
+    int val = avStr.toInt();
+    if (val >= 0 && val <= 9) return val;
+  }
+  return 0;
 }
 
 String extractDaysString(String json) {
@@ -289,20 +287,19 @@ String loadDayConfigsFromFS(String id) {
 
 void initDefaultUsers() {
   userCount = 0;
-  // Default Admin
-  userList[userCount++] = { "Administrator", "admin123", "admin", "Admin Privilege", "/images/user.png" };
-  // Default Standard User
-  userList[userCount++] = { "User123test", "user", "user", "Standard User Access", "/images/user.png" };
+  // Default Admin (avatarIndex: 0)
+  userList[userCount++] = { "Administrator", "admin123", "admin", "Admin Privilege", 0, "0" };
+  // Default Standard User (avatarIndex: 0)
+  userList[userCount++] = { "User123test", "user", "user", "Standard User Access", 0, "0" };
 }
 
 void saveUsersToFS() {
   File f = LittleFS.open("/users.txt", "w");
   if (f) {
     for (int i = 0; i < userCount; i++) {
-      f.println(userList[i].username + "\t" + userList[i].password + "\t" + userList[i].type + "\t" + userList[i].permission);
-      if (userList[i].avatarUrl.length() > 0 && userList[i].avatarUrl != "/images/user.png") {
-        saveAvatarToFS(userList[i].username, userList[i].avatarUrl);
-      }
+      int av = userList[i].avatarIndex;
+      if (av < 0 || av > 9) av = 0;
+      f.println(userList[i].username + "\t" + userList[i].password + "\t" + userList[i].type + "\t" + userList[i].permission + "\t" + String(av));
     }
     f.close();
   }
@@ -330,18 +327,23 @@ void loadUsersFromFS() {
     int p1 = line.indexOf('\t');
     int p2 = (p1 >= 0) ? line.indexOf('\t', p1 + 1) : -1;
     int p3 = (p2 >= 0) ? line.indexOf('\t', p2 + 1) : -1;
+    int p4 = (p3 >= 0) ? line.indexOf('\t', p3 + 1) : -1;
 
     if (p1 >= 0 && p2 >= 0 && p3 >= 0) {
       String u = line.substring(0, p1);
       String p = line.substring(p1 + 1, p2);
       String t = line.substring(p2 + 1, p3);
-      String perm = line.substring(p3 + 1);
+      String perm = (p4 >= 0) ? line.substring(p3 + 1, p4) : line.substring(p3 + 1);
+      int avIdx = 0;
+      if (p4 >= 0) {
+        avIdx = line.substring(p4 + 1).toInt();
+        if (avIdx < 0 || avIdx > 9) avIdx = 0;
+      }
 
       // Filter out old removed users if present in file
       if (u == "Sarah_Chen" || u == "Alex_Rivera") continue;
 
-      String av = loadAvatarFromFS(u);
-      userList[userCount++] = { u, p, t, perm, av };
+      userList[userCount++] = { u, p, t, perm, avIdx, String(avIdx) };
     }
   }
   f.close();
@@ -389,18 +391,21 @@ void loadRequestsFromFS() {
   f.close();
 }
 
-void addUser(String username, String password, String type, String permission) {
+void addUser(String username, String password, String type, String permission, int avatarIndex = 0) {
+  if (avatarIndex < 0 || avatarIndex > 9) avatarIndex = 0;
   for (int i = 0; i < userCount; i++) {
     if (userList[i].username.equalsIgnoreCase(username)) {
       userList[i].password = password;
       userList[i].type = type;
       userList[i].permission = permission;
+      userList[i].avatarIndex = avatarIndex;
+      userList[i].avatarUrl = String(avatarIndex);
       saveUsersToFS();
       return;
     }
   }
   if (userCount < MAX_USERS) {
-    userList[userCount++] = { username, password, type, permission };
+    userList[userCount++] = { username, password, type, permission, avatarIndex, String(avatarIndex) };
     saveUsersToFS();
   }
 }
@@ -799,13 +804,14 @@ String buildSyncJson() {
   for (int i = 0; i < userCount; i++) {
     if (i > 0) json += ",";
     bool online = (userLastSeen[i] > 0 && (millis() - userLastSeen[i] < 15000));
-    String av = userList[i].avatarUrl;
-    if (av.length() == 0) av = "/images/user.png";
+    int avIdx = userList[i].avatarIndex;
+    if (avIdx < 0 || avIdx > 9) avIdx = 0;
     json += "{";
     json += "\"username\":\"" + userList[i].username + "\",";
     json += "\"password\":\"" + userList[i].password + "\",";
     json += "\"type\":\"" + userList[i].type + "\",";
-    json += "\"avatarUrl\":\"" + av + "\",";
+    json += "\"avatarIndex\":" + String(avIdx) + ",";
+    json += "\"avatarUrl\":\"" + String(avIdx) + "\",";
     json += "\"permission\":\"" + userList[i].permission + "\",";
     json += "\"time\":[0,1440],";
     json += "\"isOnline\":" + String(online ? "true" : "false") + ",";
@@ -1171,37 +1177,42 @@ void onEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventTyp
             String p = extractJsonString(msg, "password");
             String t = extractJsonString(msg, "type");
             String perm = extractJsonString(msg, "permission");
+            int avIdx = extractAvatarIndex(msg);
             if (u.length() > 0) {
-              addUser(u, p.length() > 0 ? p : "user", t.length() > 0 ? t : "user", perm.length() > 0 ? perm : "Standard User Access");
+              addUser(u, p.length() > 0 ? p : "user", t.length() > 0 ? t : "user", perm.length() > 0 ? perm : "Standard User Access", avIdx);
             }
           } else if (action == "update_avatar") {
             String u = extractJsonString(msg, "username");
-            String av = extractJsonString(msg, "avatarUrl");
-            if (u.length() > 0 && av.length() > 0) {
+            int avIdx = extractAvatarIndex(msg);
+            if (u.length() > 0) {
               for (int i = 0; i < userCount; i++) {
                 if (userList[i].username.equalsIgnoreCase(u)) {
-                  userList[i].avatarUrl = av;
-                  saveAvatarToFS(u, av);
+                  userList[i].avatarIndex = avIdx;
+                  userList[i].avatarUrl = String(avIdx);
+                  saveUsersToFS();
                   break;
                 }
               }
+              ws.textAll(buildSyncJson());
             }
           } else if (action == "update") {
             String u = extractJsonString(msg, "username");
             String p = extractJsonString(msg, "password");
-            String av = extractJsonString(msg, "avatarUrl");
+            int avIdx = extractAvatarIndex(msg);
+            bool hasAv = (msg.indexOf("\"avatarIndex\"") >= 0 || msg.indexOf("\"avatarUrl\"") >= 0);
             if (u.length() > 0) {
               for (int i = 0; i < userCount; i++) {
                 if (userList[i].username.equalsIgnoreCase(u)) {
                   if (p.length() > 0) userList[i].password = p;
-                  if (av.length() > 0) {
-                    userList[i].avatarUrl = av;
-                    saveAvatarToFS(u, av);
+                  if (hasAv) {
+                    userList[i].avatarIndex = avIdx;
+                    userList[i].avatarUrl = String(avIdx);
                   }
                   saveUsersToFS();
                   break;
                 }
               }
+              ws.textAll(buildSyncJson());
             }
           } else if (action == "delete") {
             String u = extractJsonString(msg, "username");

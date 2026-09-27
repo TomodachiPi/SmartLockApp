@@ -45,7 +45,8 @@ let profiles: any[] = [
     username: 'Administrator',
     password: 'admin123',
     type: 'admin',
-    avatarUrl: '/images/user.png',
+    avatarIndex: 0,
+    avatarUrl: '0',
     time: [0, 1440],
     permission: 'Admin Privilege',
     joinedDate: 'Jan 15, 2026',
@@ -56,7 +57,8 @@ let profiles: any[] = [
     username: 'User123test',
     password: 'user',
     type: 'user',
-    avatarUrl: '/images/user.png',
+    avatarIndex: 0,
+    avatarUrl: '0',
     time: [600, 780],
     permission: 'Standard User Access',
     joinedDate: 'Feb 10, 2026',
@@ -72,8 +74,12 @@ function getSyncedProfiles() {
     const lastSeen = onlineUsersLastSeen.get(key);
     // Active if seen in the last 15 seconds
     const isOnline = lastSeen ? now - lastSeen < 15000 : false;
+    const avIdx = p.avatarIndex !== undefined ? Number(p.avatarIndex) : (p.avatarUrl ? parseInt(String(p.avatarUrl), 10) || 0 : 0);
+    const validIdx = !isNaN(avIdx) && avIdx >= 0 && avIdx < 10 ? avIdx : 0;
     return {
       ...p,
+      avatarIndex: validIdx,
+      avatarUrl: String(validIdx),
       isOnline,
       lastActive: isOnline ? 'Active now' : p.lastActive || 'Offline',
     };
@@ -491,15 +497,17 @@ wss.on('connection', (ws) => {
               profiles = [...profiles.filter((p) => p.username.toLowerCase() !== payload.username.toLowerCase()), payload];
             } else if (action === 'update_avatar' || action === 'update') {
               const uName = (payload?.username || parsed.username || '').toLowerCase();
-              const avUrl = payload?.avatarUrl || parsed.avatarUrl;
-              const isAvatarValid = avUrl && avUrl !== 'data:,' && avUrl !== 'test-url' && avUrl.length > 15;
+              const avIdx = payload?.avatarIndex !== undefined ? Number(payload.avatarIndex) : (parsed.avatarIndex !== undefined ? Number(parsed.avatarIndex) : undefined);
+              const avUrl = payload?.avatarUrl || parsed.avatarUrl || (avIdx !== undefined ? String(avIdx) : undefined);
               if (uName) {
                 profiles = profiles.map((p) => {
                   if (p.username.toLowerCase() === uName) {
+                    const finalIndex = avIdx !== undefined ? avIdx : (avUrl ? parseInt(avUrl, 10) || 0 : (p as any).avatarIndex ?? 0);
                     return {
                       ...p,
                       ...(payload || {}),
-                      avatarUrl: isAvatarValid ? avUrl : (p.avatarUrl || '/images/user.png'),
+                      avatarIndex: finalIndex,
+                      avatarUrl: String(finalIndex),
                     };
                   }
                   return p;
@@ -655,20 +663,25 @@ app.get('/api/profiles', (_req, res) => {
 });
 
 app.post('/api/profiles/avatar', (req, res) => {
-  const { username, avatarUrl } = req.body;
-  if (!username || !avatarUrl || avatarUrl === 'data:,' || avatarUrl === 'test-url' || avatarUrl.length < 15) {
-    res.status(400).json({ error: 'Missing or invalid avatarUrl' });
+  const { username, avatarIndex, avatarUrl } = req.body;
+  if (!username) {
+    res.status(400).json({ error: 'Missing username' });
     return;
   }
 
   const uName = String(username).trim().toLowerCase();
+  const rawIdx = avatarIndex !== undefined ? avatarIndex : avatarUrl;
+  const numIdx = rawIdx !== undefined ? parseInt(String(rawIdx), 10) : 0;
+  const finalIdx = !isNaN(numIdx) && numIdx >= 0 && numIdx < 10 ? numIdx : 0;
+
   let updated = false;
   profiles = profiles.map((p) => {
     if (p.username.toLowerCase() === uName) {
       updated = true;
       return {
         ...p,
-        avatarUrl,
+        avatarIndex: finalIdx,
+        avatarUrl: String(finalIdx),
       };
     }
     return p;
@@ -680,7 +693,8 @@ app.post('/api/profiles/avatar', (req, res) => {
       username: String(username).trim(),
       password: 'user',
       type: 'user',
-      avatarUrl,
+      avatarIndex: finalIdx,
+      avatarUrl: String(finalIdx),
       permission: 'Standard User Access',
       joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       isOnline: true,
@@ -690,7 +704,7 @@ app.post('/api/profiles/avatar', (req, res) => {
 
   // Broadcast to all WebSocket connected devices immediately
   broadcast(buildSyncPayload());
-  res.json({ success: true, avatarUrl });
+  res.json({ success: true, avatarIndex: finalIdx, avatarUrl: String(finalIdx) });
 });
 
 // Mount Vite in dev mode or serve static files in prod

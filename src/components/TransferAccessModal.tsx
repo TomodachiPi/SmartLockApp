@@ -13,6 +13,7 @@ import {
   Ban,
 } from 'lucide-react';
 import user_png from '../assets/images/user.png';
+import { getAvatarByIndex } from '../data/avatarIcons';
 
 interface TransferAccessModalProps {
   isOpen: boolean;
@@ -180,9 +181,9 @@ export const TransferAccessModal: React.FC<TransferAccessModalProps> = ({ isOpen
                         <div className="flex items-center gap-2.5">
                           <div className="relative">
                             <img
-                              src={user.avatarUrl || user_png}
+                              src={getAvatarByIndex(user.avatarIndex !== undefined ? user.avatarIndex : user.avatarUrl)}
                               alt={user.username}
-                              className={`w-8 h-8 rounded-full object-cover border ${
+                              className={`w-8 h-8 rounded-full object-contain p-0.5 bg-slate-900 border ${
                                 !isAllowed ? 'border-slate-700 grayscale' : 'border-slate-600'
                               }`}
                             />

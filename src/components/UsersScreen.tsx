@@ -23,6 +23,7 @@ import {
   Info,
 } from 'lucide-react';
 import user_png from './../assets/images/user.png';
+import { getAvatarByIndex } from '../data/avatarIcons';
 
 export const UsersScreen: React.FC = () => {
   const {
@@ -103,21 +104,21 @@ export const UsersScreen: React.FC = () => {
           <div className="flex items-center gap-3.5">
             <div className="relative group">
               <img
-                src={currentUser?.avatarUrl || user_png}
+                src={getAvatarByIndex(currentUser?.avatarIndex !== undefined ? currentUser.avatarIndex : currentUser?.avatarUrl)}
                 alt="Profile Avatar"
                 onError={(e) => {
                   e.currentTarget.onerror = null;
                   e.currentTarget.src = user_png;
                 }}
-                className="w-16 h-16 rounded-full object-cover border-2 border-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.3)]"
+                className="w-16 h-16 rounded-full object-contain p-1.5 bg-slate-900 border-2 border-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.3)]"
               />
               <button
                 id="edit-avatar-quick-btn"
                 onClick={() => handleOpenEdit('photo')}
                 className="absolute bottom-0 right-0 bg-cyan-500 text-slate-950 p-1.5 rounded-full hover:scale-110 transition-transform shadow cursor-pointer"
-                title="Change profile photo"
+                title="Change profile icon"
               >
-                <Camera className="w-3.5 h-3.5" />
+                <Sparkles className="w-3.5 h-3.5" />
               </button>
             </div>
 
@@ -202,13 +203,13 @@ export const UsersScreen: React.FC = () => {
               >
                 <div className="relative">
                   <img
-                    src={p.avatarUrl || user_png}
+                    src={getAvatarByIndex(p.avatarIndex !== undefined ? p.avatarIndex : p.avatarUrl)}
                     alt={p.username}
                     onError={(e) => {
                       e.currentTarget.onerror = null;
                       e.currentTarget.src = user_png;
                     }}
-                    className="w-7 h-7 rounded-full object-cover border border-slate-600"
+                    className="w-7 h-7 rounded-full object-contain p-0.5 bg-slate-900 border border-slate-600"
                   />
                   <span
                     className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-[#0f172a] ${

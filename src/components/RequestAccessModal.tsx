@@ -13,6 +13,7 @@ import {
   Send,
 } from 'lucide-react';
 import user_png from '../assets/images/user.png';
+import { getAvatarByIndex } from '../data/avatarIcons';
 
 interface RequestAccessModalProps {
   isOpen: boolean;
@@ -126,9 +127,9 @@ export const RequestAccessModal: React.FC<RequestAccessModalProps> = ({
               <div className="flex items-center gap-3 pt-1">
                 <div className="relative">
                   <img
-                    src={holderProfile?.avatarUrl || user_png}
+                    src={getAvatarByIndex(holderProfile?.avatarIndex !== undefined ? holderProfile.avatarIndex : holderProfile?.avatarUrl)}
                     alt={sessionHolderName}
-                    className="w-11 h-11 rounded-full object-cover border-2 border-cyan-500/40 shadow-sm"
+                    className="w-11 h-11 rounded-full object-contain p-1 bg-slate-900 border-2 border-cyan-500/40 shadow-sm"
                   />
                   <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-400 border-2 border-[#090d16]" />
                 </div>

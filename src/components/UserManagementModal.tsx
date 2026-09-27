@@ -19,6 +19,7 @@ import {
   User,
 } from 'lucide-react';
 import user_png from './../assets/images/user.png';
+import { AVATAR_ICONS, getAvatarByIndex, parseAvatarIndex } from '../data/avatarIcons';
 
 interface UserManagementModalProps {
   isSelf: boolean;
@@ -32,6 +33,7 @@ interface UserManagementModalProps {
       type: 'admin' | 'user';
       permission: string;
       email?: string;
+      avatarIndex?: number;
       avatarUrl?: string;
       time?: number[];
     },
@@ -40,15 +42,6 @@ interface UserManagementModalProps {
   ) => { success: boolean; error?: string };
   onDeleteUser?: (username: string) => { success: boolean; error?: string };
 }
-
-const sampleAvatars = [
-  user_png,
-  user_png,
-  user_png,
-  user_png,
-  user_png,
-  user_png
-];
 
 export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   isSelf,
@@ -70,10 +63,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   const [role, setRole] = useState<'admin' | 'user'>('user');
   const [permission, setPermission] = useState('Standard User Access');
   const [email, setEmail] = useState('');
-  const [avatarUrl, setAvatarUrl] = useState(sampleAvatars[0]);
-  const [selectedPhoto, setSelectedPhoto] = useState(avatarUrl || '');
-  const [customAvatarInput, setCustomAvatarInput] = useState('');
-  const [showCustomAvatar, setShowCustomAvatar] = useState(false);
+  const [selectedIconIndex, setSelectedIconIndex] = useState<number>(0);
 
   // Time clearance schedule preset
   const [clearancePreset, setClearancePreset] = useState<'24_7' | 'standard' | 'extended' | 'morning' | 'custom'>('standard');
@@ -90,7 +80,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
       setRole(userToEdit.type);
       setPermission(userToEdit.permission || (userToEdit.type === 'admin' ? 'Admin Privilege' : 'Standard User Access'));
       setEmail(userToEdit.email || `${userToEdit.username.toLowerCase().replace(/[^a-z0-9]/g, '')}@gmail.com`);
-      setAvatarUrl(userToEdit.avatarUrl || sampleAvatars[0]);
+      setSelectedIconIndex(parseAvatarIndex(userToEdit.avatarIndex !== undefined ? userToEdit.avatarIndex : userToEdit.avatarUrl));
       
       // Map user's clearance time
       if (userToEdit.type === 'admin' || (userToEdit.time && userToEdit.time[0] === 0 && userToEdit.time[1] >= 1440)) {
@@ -107,29 +97,14 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
       setRole('user');
       setPermission('Standard User Access');
       setEmail('');
-      setAvatarUrl(sampleAvatars[Math.floor(Math.random() * sampleAvatars.length)]);
+      setSelectedIconIndex(0);
       setClearancePreset('standard');
     }
     setErrorMessage(null);
     setIsConfirmingDelete(false);
-    setShowCustomAvatar(false);
-    setCustomAvatarInput('');
   }, [userToEdit, isOpen]);
 
   if (!isOpen) return null;
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (typeof reader.result === 'string') {
-          setAvatarUrl(reader.result);
-        }
-      };
-      reader.readAsDataURL(file);
-    }
-  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -171,6 +146,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
       type: 'admin' | 'user';
       permission: string;
       email?: string;
+      avatarIndex?: number;
       avatarUrl?: string;
       time?: number[];
     } = {
@@ -178,7 +154,8 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
       type: role,
       permission: role === 'admin' ? 'Admin Privilege' : permission,
       email: email.trim() || `${cleanUsername.toLowerCase().replace(/[^a-z0-9]/g, '')}@lab.smartlock.io`,
-      avatarUrl: customAvatarInput.trim() || avatarUrl,
+      avatarIndex: selectedIconIndex,
+      avatarUrl: String(selectedIconIndex),
       time: timeRange,
     };
 
@@ -263,32 +240,43 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
         <form onSubmit={handleSubmit} className="p-4 overflow-y-auto space-y-4 text-xs">
           {/* Avatar Selector */}
           <div className="space-y-2">
-            <label className="text-slate-300 font-semibold flex items-center gap-1.5">
-              <Camera className="w-3.5 h-3.5 text-cyan-400" />
-              Profile Photo
+            <label className="text-slate-300 font-semibold flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                Profile Icon Badge
+              </span>
+              <span className="text-[10px] text-cyan-400 font-mono">
+                {AVATAR_ICONS[selectedIconIndex]?.name || 'Standard User'} (#{selectedIconIndex})
+              </span>
             </label>
-            <div className="flex items-center gap-3">
-              <img
-                src={customAvatarInput || avatarUrl}
-                alt="Profile Photo Preview"
-                onError={(e) => {
-                  e.currentTarget.onerror = null;
-                  e.currentTarget.src = user_png;
-                }}
-                className="w-14 h-14 rounded-full object-cover border-2 border-cyan-400 shadow-md shrink-0"
-              />
-              <div className="flex-1 space-y-2">
-                <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                  <label className="flex items-center justify-center gap-2 w-full p-2.5 bg-[#090d16] border border-dashed border-slate-700 hover:border-emerald-500 rounded-xl text-xs text-slate-300 cursor-pointer transition-colors">
-                    <Upload className="w-4 h-4 text-emerald-400" />
-                    <span>Upload Photo from Device (PNG, JPG)</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleFileUpload}
-                      className="hidden"
-                    />
-                  </label>
+            <div className="flex items-center gap-3 bg-[#090d16] p-2.5 rounded-xl border border-slate-800">
+              <div className="w-12 h-12 rounded-full bg-slate-900 border-2 border-cyan-400 flex items-center justify-center p-1.5 shadow-md shrink-0">
+                <img
+                  src={getAvatarByIndex(selectedIconIndex)}
+                  alt="Selected avatar"
+                  className="w-full h-full object-contain"
+                />
+              </div>
+              <div className="flex-1">
+                <div className="grid grid-cols-5 gap-1.5">
+                  {AVATAR_ICONS.map((opt) => {
+                    const isSelected = selectedIconIndex === opt.index;
+                    return (
+                      <button
+                        key={opt.index}
+                        type="button"
+                        onClick={() => setSelectedIconIndex(opt.index)}
+                        className={`p-1 rounded-lg border flex flex-col items-center justify-center transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-cyan-500/20 border-cyan-400 shadow-sm'
+                            : 'bg-slate-900/60 border-slate-800 hover:border-slate-600'
+                        }`}
+                        title={opt.name}
+                      >
+                        <img src={opt.src} alt={opt.name} className="w-6 h-6 object-contain" />
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </div>

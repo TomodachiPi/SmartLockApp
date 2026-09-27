@@ -13,6 +13,7 @@ import {
 import { ClientMessage, ServerMessage, SmartLockSyncState } from '../types/esp8266Protocol';
 import user_png from './../assets/images/user.png';
 import { generateMonthHistory } from '../data/mockMonthHistory';
+import { AVATAR_ICONS, getAvatarByIndex, parseAvatarIndex } from '../data/avatarIcons';
 
 interface AppContextType {
   currentUser: Profile | null;
@@ -56,7 +57,7 @@ interface AppContextType {
   updateSchedule: (schedule: UserSchedule) => void;
   deleteSchedule: (id: string) => void;
   updatePassword: (oldPass: string, newPass: string) => { success: boolean; error?: string };
-  updateAvatar: (avatarUrl: string) => void;
+  updateAvatar: (avatarIndexOrUrl: number | string) => void;
   adminCreateUser: (userData: Omit<Profile, 'joinedDate'>) => { success: boolean; error?: string };
   adminUpdateUser: (originalUsername: string, updatedData: Partial<Profile>) => { success: boolean; error?: string };
   adminDeleteUser: (username: string) => { success: boolean; error?: string };
@@ -82,7 +83,8 @@ const defaultProfiles: Profile[] = [
     username: 'Administrator',
     password: 'admin123',
     type: 'admin',
-    avatarUrl: user_png,
+    avatarIndex: 0,
+    avatarUrl: '0',
     time: [0, 1440],
     permission: 'Admin Privilege',
     joinedDate: 'Jan 15, 2026',
@@ -93,7 +95,8 @@ const defaultProfiles: Profile[] = [
     username: 'User123test',
     password: 'user',
     type: 'user',
-    avatarUrl: user_png,
+    avatarIndex: 0,
+    avatarUrl: '0',
     time: [600, 780],
     permission: 'Standard User Access',
     joinedDate: 'Feb 10, 2026',
@@ -486,6 +489,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const initialLockTimeRef = useRef<number | null>(null);
   const simTimerRef = useRef<any>(null);
   const localScheduleModTimestampsRef = useRef<Map<string, number>>(new Map());
+  const localAvatarModTimestampsRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
     lockedRef.current = locked;
@@ -668,59 +672,61 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           (p: any) => p.username !== 'Sarah_Chen' && p.username !== 'Alex_Rivera'
         );
         const currentActiveUsername = currentUserRef.current?.username.toLowerCase();
-
-        const isCustomAvatar = (url?: string) =>
-          url &&
-          url !== '/images/user.png' &&
-          url !== 'test-url' &&
-          url !== 'data:,' &&
-          url.length > 20;
+        const now = Date.now();
 
         setProfiles((prevProfiles) => {
-          return cleanProfiles.map((incProf: Profile) => {
+          return cleanProfiles.map((incProf: any) => {
+            const uKey = incProf.username.toLowerCase();
             const localProf = prevProfiles.find(
-              (lp) => lp.username.toLowerCase() === incProf.username.toLowerCase()
+              (lp) => lp.username.toLowerCase() === uKey
             );
 
-            let avatarUrl = incProf.avatarUrl;
-            if (isCustomAvatar(incProf.avatarUrl)) {
-              avatarUrl = incProf.avatarUrl;
-            } else if (isCustomAvatar(localProf?.avatarUrl)) {
-              avatarUrl = localProf!.avatarUrl;
-            } else if (
-              currentActiveUsername === incProf.username.toLowerCase() &&
-              isCustomAvatar(currentUserRef.current?.avatarUrl)
-            ) {
-              avatarUrl = currentUserRef.current!.avatarUrl;
-            } else {
-              avatarUrl = incProf.avatarUrl || user_png;
+            const lastLocalMod = localAvatarModTimestampsRef.current.get(uKey) || 0;
+            const isRecentlyEditedLocally = now - lastLocalMod < 15000;
+
+            let chosenIdx = parseAvatarIndex(incProf.avatarIndex !== undefined ? incProf.avatarIndex : incProf.avatarUrl);
+
+            // If edited locally recently, preserve local index during sync window
+            if (isRecentlyEditedLocally) {
+              if (currentActiveUsername === uKey && currentUserRef.current?.avatarIndex !== undefined) {
+                chosenIdx = currentUserRef.current.avatarIndex;
+              } else if (localProf?.avatarIndex !== undefined) {
+                chosenIdx = localProf.avatarIndex;
+              }
             }
 
             return {
               ...incProf,
-              avatarUrl,
+              avatarIndex: chosenIdx,
+              avatarUrl: String(chosenIdx),
             };
           });
         });
 
-        // Also update currentUser avatar if incoming from server has a newly updated valid avatar
+        // Also update currentUser avatar if server has updated it and local was not recently modified
         if (currentUserRef.current) {
-          const match = cleanProfiles.find(
-            (p: Profile) => p.username.toLowerCase() === currentActiveUsername
-          );
-          if (
-            match &&
-            isCustomAvatar(match.avatarUrl) &&
-            match.avatarUrl !== currentUserRef.current.avatarUrl
-          ) {
-            setCurrentUser((prev) => {
-              if (!prev) return prev;
-              const updated = { ...prev, avatarUrl: match.avatarUrl };
-              try {
-                localStorage.setItem('current_user', JSON.stringify(updated));
-              } catch {}
-              return updated;
-            });
+          const uKey = currentActiveUsername;
+          const lastLocalMod = uKey ? (localAvatarModTimestampsRef.current.get(uKey) || 0) : 0;
+          const isRecentlyEditedLocally = now - lastLocalMod < 15000;
+
+          if (!isRecentlyEditedLocally && uKey) {
+            const match = cleanProfiles.find(
+              (p: any) => p.username.toLowerCase() === uKey
+            );
+            if (match) {
+              const serverIdx = parseAvatarIndex(match.avatarIndex !== undefined ? match.avatarIndex : match.avatarUrl);
+              if (serverIdx !== currentUserRef.current.avatarIndex) {
+                setCurrentUser((prev) => {
+                  if (!prev) return prev;
+                  const updated = { ...prev, avatarIndex: serverIdx, avatarUrl: String(serverIdx) };
+                  try {
+                    localStorage.setItem('current_user', JSON.stringify(updated));
+                    localStorage.setItem(`smartlock_avatar_${uKey}`, String(serverIdx));
+                  } catch {}
+                  return updated;
+                });
+              }
+            }
           }
         }
       }
@@ -827,23 +833,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           });
         } else if ((action === 'update' || action === 'update_avatar') && payload) {
           const uName = (payload.username || parsed.username || '').toLowerCase();
-          const avUrl = payload.avatarUrl || parsed.avatarUrl;
+          const rawAv = payload.avatarIndex !== undefined ? payload.avatarIndex : (payload.avatarUrl !== undefined ? payload.avatarUrl : (parsed.avatarIndex !== undefined ? parsed.avatarIndex : parsed.avatarUrl));
+          const hasAvatar = rawAv !== undefined && rawAv !== null && rawAv !== '';
+          const newIdx = hasAvatar ? parseAvatarIndex(rawAv) : undefined;
+
+          if (uName && newIdx !== undefined) {
+            localAvatarModTimestampsRef.current.set(uName, Date.now());
+            try {
+              localStorage.setItem(`smartlock_avatar_${uName}`, String(newIdx));
+            } catch {}
+          }
           setProfiles((prev) =>
             prev.map((p) =>
               p.username.toLowerCase() === uName
-                ? { ...p, ...payload, avatarUrl: (avUrl && avUrl.length > 20 && avUrl !== 'data:,' ? avUrl : p.avatarUrl) }
+                ? {
+                    ...p,
+                    ...payload,
+                    avatarIndex: newIdx !== undefined ? newIdx : p.avatarIndex,
+                    avatarUrl: newIdx !== undefined ? String(newIdx) : p.avatarUrl,
+                  }
                 : p
             )
           );
-          if (
-            currentUserRef.current?.username.toLowerCase() === uName &&
-            avUrl &&
-            avUrl.length > 20 &&
-            avUrl !== 'data:,'
-          ) {
+          if (currentUserRef.current?.username.toLowerCase() === uName && newIdx !== undefined) {
             setCurrentUser((prev) => {
               if (!prev) return prev;
-              const updated = { ...prev, avatarUrl: avUrl };
+              const updated = {
+                ...prev,
+                ...payload,
+                avatarIndex: newIdx,
+                avatarUrl: String(newIdx),
+              };
               try {
                 localStorage.setItem('current_user', JSON.stringify(updated));
               } catch {}
@@ -1404,31 +1424,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const login = (username: string, password: string): { success: boolean; error?: 'user_not_found' | 'incorrect_password' } => {
     let found = profiles.find((p) => p.username.toLowerCase() === username.trim().toLowerCase());
     
-    // Check localStorage in case another tab or process synced profiles or saved a custom avatar
-    const isCustomAvatar = (url?: string) =>
-      url &&
-      url !== '/images/user.png' &&
-      url !== 'test-url' &&
-      url !== 'data:,' &&
-      url.length > 20;
-
-    let savedAvatarUrl: string | undefined;
+    // Check localStorage in case another tab or process saved a custom avatar choice
+    const uKey = username.trim().toLowerCase();
+    let savedIndex: number | undefined;
     try {
-      const savedUserStr = localStorage.getItem('current_user');
-      if (savedUserStr) {
-        const parsed = JSON.parse(savedUserStr);
-        if (parsed?.username?.toLowerCase() === username.trim().toLowerCase() && isCustomAvatar(parsed.avatarUrl)) {
-          savedAvatarUrl = parsed.avatarUrl;
-        }
-      }
-      const saved = localStorage.getItem('user_data');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          const fromUserData = parsed.find((p: any) => p.username.toLowerCase() === username.trim().toLowerCase());
-          if (!found) found = fromUserData;
-          if (!savedAvatarUrl && isCustomAvatar(fromUserData?.avatarUrl)) {
-            savedAvatarUrl = fromUserData.avatarUrl;
+      const directCached = localStorage.getItem(`smartlock_avatar_${uKey}`);
+      if (directCached !== null && directCached !== '') {
+        savedIndex = parseAvatarIndex(directCached);
+      } else {
+        const savedUserStr = localStorage.getItem('current_user');
+        if (savedUserStr) {
+          const parsed = JSON.parse(savedUserStr);
+          if (parsed?.username?.toLowerCase() === uKey) {
+            savedIndex = parseAvatarIndex(parsed.avatarIndex !== undefined ? parsed.avatarIndex : parsed.avatarUrl);
           }
         }
       }
@@ -1437,9 +1445,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!found) return { success: false, error: 'user_not_found' };
     if (found.password !== password) return { success: false, error: 'incorrect_password' };
 
-    const effectiveAvatar = savedAvatarUrl || (isCustomAvatar(found.avatarUrl) ? found.avatarUrl : (found.avatarUrl || user_png));
+    const effectiveIndex = savedIndex !== undefined ? savedIndex : parseAvatarIndex(found.avatarIndex !== undefined ? found.avatarIndex : found.avatarUrl);
 
-    const updatedUser: Profile = { ...found, avatarUrl: effectiveAvatar, isOnline: true, lastActive: 'Active now' };
+    const updatedUser: Profile = {
+      ...found,
+      avatarIndex: effectiveIndex,
+      avatarUrl: String(effectiveIndex),
+      isOnline: true,
+      lastActive: 'Active now',
+    };
     setProfiles((prev) => {
       const exists = prev.some((p) => p.username.toLowerCase() === found!.username.toLowerCase());
       if (exists) {
@@ -1573,28 +1587,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true };
   };
 
-  const updateAvatar = (avatarUrl: string) => {
+  const updateAvatar = (avatarIndexOrUrl: number | string) => {
     if (!currentUser) return;
-    if (!avatarUrl || avatarUrl === 'data:,' || avatarUrl.length < 15) {
-      console.warn('[SmartLock] Attempted to update avatar with invalid or empty data URL, ignoring.');
-      return;
-    }
+    const newIndex = parseAvatarIndex(avatarIndexOrUrl);
 
-    const updatedUser = { ...currentUser, avatarUrl };
+    const userKey = currentUser.username.toLowerCase();
+    const now = Date.now();
+    localAvatarModTimestampsRef.current.set(userKey, now);
+
+    const updatedUser: Profile = {
+      ...currentUser,
+      avatarIndex: newIndex,
+      avatarUrl: String(newIndex),
+    };
     currentUserRef.current = updatedUser;
     setCurrentUser(updatedUser);
     setProfiles((prev) =>
       prev.map((p) =>
-        p.username.toLowerCase() === currentUser.username.toLowerCase() ? updatedUser : p
+        p.username.toLowerCase() === userKey ? updatedUser : p
       )
     );
 
     // Save locally
     try {
       localStorage.setItem('current_user', JSON.stringify(updatedUser));
+      localStorage.setItem(`smartlock_avatar_${userKey}`, String(newIndex));
       const existingUsers: Profile[] = JSON.parse(localStorage.getItem('user_data') || '[]');
-      const savedProfiles = existingUsers.some((p) => p.username.toLowerCase() === currentUser.username.toLowerCase())
-        ? existingUsers.map((p) => (p.username.toLowerCase() === currentUser.username.toLowerCase() ? updatedUser : p))
+      const savedProfiles = existingUsers.some((p) => p.username.toLowerCase() === userKey)
+        ? existingUsers.map((p) => (p.username.toLowerCase() === userKey ? updatedUser : p))
         : [...existingUsers, updatedUser];
       localStorage.setItem('user_data', JSON.stringify(savedProfiles));
     } catch {}
@@ -1605,12 +1625,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       entity: 'profiles',
       action: 'update_avatar',
       username: currentUser.username,
-      avatarUrl: avatarUrl,
-      payload: {
-        username: currentUser.username,
-        avatarUrl: avatarUrl,
-      },
-      timestamp: Date.now(),
+      avatarIndex: newIndex,
+      avatarUrl: String(newIndex),
+      timestamp: now,
     });
 
     // Also notify REST backend for multi-client replication
@@ -1620,7 +1637,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           username: currentUser.username,
-          avatarUrl: avatarUrl,
+          avatarIndex: newIndex,
+          avatarUrl: String(newIndex),
         }),
       }).catch(() => {});
     } catch {}
@@ -1633,6 +1651,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, error: `Username "${cleanUsername}" already exists.` };
     }
 
+    const avIdx = parseAvatarIndex(userData.avatarIndex !== undefined ? userData.avatarIndex : userData.avatarUrl);
+
     const newProfile: Profile = {
       ...userData,
       username: cleanUsername,
@@ -1640,7 +1660,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       isOnline: false,
       lastActive: 'Never logged in',
       permission: userData.permission || (userData.type === 'admin' ? 'Admin Privilege' : 'Standard User Access'),
-      avatarUrl: userData.avatarUrl || user_png,
+      avatarIndex: avIdx,
+      avatarUrl: String(avIdx),
     };
 
     setProfiles((prev) => [...prev, newProfile]);
@@ -1660,10 +1681,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const targetUser = profiles.find((p) => p.username === originalUsername);
     if (!targetUser) return { success: false, error: 'User profile not found.' };
 
+    const avIdx = updatedData.avatarIndex !== undefined
+      ? parseAvatarIndex(updatedData.avatarIndex)
+      : (updatedData.avatarUrl !== undefined ? parseAvatarIndex(updatedData.avatarUrl) : (targetUser.avatarIndex ?? 0));
+
     const updatedProfile: Profile = {
       ...targetUser,
       ...updatedData,
       username: updatedData.username ? updatedData.username.trim() : targetUser.username,
+      avatarIndex: avIdx,
+      avatarUrl: String(avIdx),
     };
 
     setProfiles((prev) => prev.map((p) => (p.username === originalUsername ? updatedProfile : p)));

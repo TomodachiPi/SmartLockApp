@@ -20,6 +20,7 @@ import {
   CheckCheck,
 } from 'lucide-react';
 import user_png from '../assets/images/user.png';
+import { getAvatarByIndex } from '../data/avatarIcons';
 
 interface NotificationsCenterModalProps {
   isOpen: boolean;
@@ -308,9 +309,9 @@ export const NotificationsCenterModal: React.FC<NotificationsCenterModalProps> =
                           <div className="flex items-start gap-3">
                             <div className="relative shrink-0 mt-0.5">
                               <img
-                                src={fromUserObj?.avatarUrl || user_png}
+                                src={getAvatarByIndex(fromUserObj?.avatarIndex !== undefined ? fromUserObj.avatarIndex : fromUserObj?.avatarUrl)}
                                 alt={transfer.fromUsername}
-                                className="w-10 h-10 rounded-full object-cover border-2 border-cyan-500/40"
+                                className="w-10 h-10 rounded-full object-contain p-0.5 bg-slate-900 border-2 border-cyan-500/40"
                               />
                               <span
                                 className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-black ${
