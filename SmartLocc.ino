@@ -1102,172 +1102,173 @@ void onEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventTyp
           return;
         }
 
-      // User presence status (login/logout/heartbeat)
-      if (msg.indexOf("\"type\":\"USER_PRESENCE\"") >= 0) {
-        String u = extractJsonString(msg, "username");
-        String stat = extractJsonString(msg, "status");
-        if (u.length() > 0) {
-          updateUserHeartbeat(u, stat != "offline");
-          ws.textAll(buildSyncJson());
-        }
-        return;
-      }
-
-      // 2. Direct Register request from AuthScreen
-      if (msg.indexOf("\"type\":\"REGISTER_REQUEST\"") >= 0) {
-        String u = extractJsonString(msg, "username");
-        String p = extractJsonString(msg, "password");
-        if (u.length() > 0 && p.length() > 0) {
-          addRequest(u, p, "user");
-          ws.textAll(buildSyncJson());
-        }
-        return;
-      }
-
-      // 3. Lock / Unlock action from app
-      if (msg == "toggle" || msg.indexOf("\"type\":\"LOCK_ACTION\"") >= 0 || msg.indexOf("\"action\":\"toggle\"") >= 0) {
-        String username = extractJsonString(msg, "username");
-        if (username.length() == 0) username = "User";
-        triggerLockToggle(username);
-        return;
-      }
-
-      // 4. Room Transfer action
-      if (msg.indexOf("\"type\":\"ROOM_TRANSFER_ACTION\"") >= 0) {
-        handleRoomTransfer(msg);
-        ws.textAll(buildSyncJson());
-        return;
-      }
-
-      // 5. Emergency action
-      if (msg.indexOf("\"type\":\"EMERGENCY_ACTION\"") >= 0) {
-        handleEmergency(msg);
-        ws.textAll(buildSyncJson());
-        return;
-      }
-
-      // 6. Data Update action (users, requests, schedules, approvals)
-      if (msg.indexOf("\"type\":\"DATA_UPDATE_ACTION\"") >= 0) {
-        String entity = extractJsonString(msg, "entity");
-        String action = extractJsonString(msg, "action");
-
-        if (entity == "profileRequests") {
-          if (action == "create") {
-            String u = extractJsonString(msg, "username");
-            String p = extractJsonString(msg, "password");
-            if (u.length() > 0 && p.length() > 0) {
-              addRequest(u, p, "user");
-            }
-          } else if (action == "approve") {
-            String u = extractJsonString(msg, "username");
-            String p = extractJsonString(msg, "password");
-            String t = extractJsonString(msg, "type");
-            if (u.length() > 0) {
-              approveRequest(u, p, t);
-            }
-          } else if (action == "reject") {
-            String u = extractJsonString(msg, "username");
-            if (u.length() > 0) {
-              rejectRequest(u);
-            }
+        // User presence status (login/logout/heartbeat)
+        if (msg.indexOf("\"type\":\"USER_PRESENCE\"") >= 0) {
+          String u = extractJsonString(msg, "username");
+          String stat = extractJsonString(msg, "status");
+          if (u.length() > 0) {
+            updateUserHeartbeat(u, stat != "offline");
+            ws.textAll(buildSyncJson());
           }
-        } else if (entity == "profiles") {
-          if (action == "create") {
-            String u = extractJsonString(msg, "username");
-            String p = extractJsonString(msg, "password");
-            String t = extractJsonString(msg, "type");
-            String perm = extractJsonString(msg, "permission");
-            int avIdx = extractAvatarIndex(msg);
-            if (u.length() > 0) {
-              addUser(u, p.length() > 0 ? p : "user", t.length() > 0 ? t : "user", perm.length() > 0 ? perm : "Standard User Access", avIdx);
-            }
-          } else if (action == "update_avatar") {
-            String u = extractJsonString(msg, "username");
-            int avIdx = extractAvatarIndex(msg);
-            if (u.length() > 0) {
-              for (int i = 0; i < userCount; i++) {
-                if (userList[i].username.equalsIgnoreCase(u)) {
-                  userList[i].avatarIndex = avIdx;
-                  userList[i].avatarUrl = String(avIdx);
-                  saveUsersToFS();
-                  break;
-                }
+          return;
+        }
+
+        // 2. Direct Register request from AuthScreen
+        if (msg.indexOf("\"type\":\"REGISTER_REQUEST\"") >= 0) {
+          String u = extractJsonString(msg, "username");
+          String p = extractJsonString(msg, "password");
+          if (u.length() > 0 && p.length() > 0) {
+            addRequest(u, p, "user");
+            ws.textAll(buildSyncJson());
+          }
+          return;
+        }
+
+        // 3. Lock / Unlock action from app
+        if (msg == "toggle" || msg.indexOf("\"type\":\"LOCK_ACTION\"") >= 0 || msg.indexOf("\"action\":\"toggle\"") >= 0) {
+          String username = extractJsonString(msg, "username");
+          if (username.length() == 0) username = "User";
+          triggerLockToggle(username);
+          return;
+        }
+
+        // 4. Room Transfer action
+        if (msg.indexOf("\"type\":\"ROOM_TRANSFER_ACTION\"") >= 0) {
+          handleRoomTransfer(msg);
+          ws.textAll(buildSyncJson());
+          return;
+        }
+
+        // 5. Emergency action
+        if (msg.indexOf("\"type\":\"EMERGENCY_ACTION\"") >= 0) {
+          handleEmergency(msg);
+          ws.textAll(buildSyncJson());
+          return;
+        }
+
+        // 6. Data Update action (users, requests, schedules, approvals)
+        if (msg.indexOf("\"type\":\"DATA_UPDATE_ACTION\"") >= 0) {
+          String entity = extractJsonString(msg, "entity");
+          String action = extractJsonString(msg, "action");
+
+          if (entity == "profileRequests") {
+            if (action == "create") {
+              String u = extractJsonString(msg, "username");
+              String p = extractJsonString(msg, "password");
+              if (u.length() > 0 && p.length() > 0) {
+                addRequest(u, p, "user");
               }
-              ws.textAll(buildSyncJson());
+            } else if (action == "approve") {
+              String u = extractJsonString(msg, "username");
+              String p = extractJsonString(msg, "password");
+              String t = extractJsonString(msg, "type");
+              if (u.length() > 0) {
+                approveRequest(u, p, t);
+              }
+            } else if (action == "reject") {
+              String u = extractJsonString(msg, "username");
+              if (u.length() > 0) {
+                rejectRequest(u);
+              }
             }
-          } else if (action == "update") {
-            String u = extractJsonString(msg, "username");
-            String p = extractJsonString(msg, "password");
-            int avIdx = extractAvatarIndex(msg);
-            bool hasAv = (msg.indexOf("\"avatarIndex\"") >= 0 || msg.indexOf("\"avatarUrl\"") >= 0);
-            if (u.length() > 0) {
-              for (int i = 0; i < userCount; i++) {
-                if (userList[i].username.equalsIgnoreCase(u)) {
-                  if (p.length() > 0) userList[i].password = p;
-                  if (hasAv) {
+          } else if (entity == "profiles") {
+            if (action == "create") {
+              String u = extractJsonString(msg, "username");
+              String p = extractJsonString(msg, "password");
+              String t = extractJsonString(msg, "type");
+              String perm = extractJsonString(msg, "permission");
+              int avIdx = extractAvatarIndex(msg);
+              if (u.length() > 0) {
+                addUser(u, p.length() > 0 ? p : "user", t.length() > 0 ? t : "user", perm.length() > 0 ? perm : "Standard User Access", avIdx);
+              }
+            } else if (action == "update_avatar") {
+              String u = extractJsonString(msg, "username");
+              int avIdx = extractAvatarIndex(msg);
+              if (u.length() > 0) {
+                for (int i = 0; i < userCount; i++) {
+                  if (userList[i].username.equalsIgnoreCase(u)) {
                     userList[i].avatarIndex = avIdx;
                     userList[i].avatarUrl = String(avIdx);
+                    saveUsersToFS();
+                    break;
                   }
-                  saveUsersToFS();
-                  break;
                 }
+                ws.textAll(buildSyncJson());
               }
-              ws.textAll(buildSyncJson());
+            } else if (action == "update") {
+              String u = extractJsonString(msg, "username");
+              String p = extractJsonString(msg, "password");
+              int avIdx = extractAvatarIndex(msg);
+              bool hasAv = (msg.indexOf("\"avatarIndex\"") >= 0 || msg.indexOf("\"avatarUrl\"") >= 0);
+              if (u.length() > 0) {
+                for (int i = 0; i < userCount; i++) {
+                  if (userList[i].username.equalsIgnoreCase(u)) {
+                    if (p.length() > 0) userList[i].password = p;
+                    if (hasAv) {
+                      userList[i].avatarIndex = avIdx;
+                      userList[i].avatarUrl = String(avIdx);
+                    }
+                    saveUsersToFS();
+                    break;
+                  }
+                }
+                ws.textAll(buildSyncJson());
+              }
+            } else if (action == "delete") {
+              String u = extractJsonString(msg, "username");
+              if (u.length() > 0) {
+                removeUser(u);
+              }
             }
-          } else if (action == "delete") {
-            String u = extractJsonString(msg, "username");
-            if (u.length() > 0) {
-              removeUser(u);
+          } else if (entity == "schedules") {
+            if (action == "create" || action == "update") {
+              String sId = extractJsonString(msg, "id");
+              String sLbl = extractJsonString(msg, "label");
+              String sRole = extractJsonString(msg, "role");
+              String sTime = extractJsonString(msg, "time");
+              String sDays = extractDaysString(msg);
+              String sStart = extractJsonString(msg, "startTime");
+              String sEnd = extractJsonString(msg, "endTime");
+              String sStat = extractJsonString(msg, "status");
+              String sDayConfigs = extractDayConfigsJson(msg);
+              if (sId.length() == 0) sId = String(millis());
+              if (sRole.length() == 0) sRole = "user";
+              if (sStat.length() == 0) sStat = "active";
+              addOrUpdateSchedule(sId, sLbl, sRole, sTime, sDays, sStart, sEnd, sStat, sDayConfigs);
+            } else if (action == "delete") {
+              String sId = extractJsonString(msg, "id");
+              String sLbl = extractJsonString(msg, "label");
+              if (sId.length() > 0) {
+                removeSchedule(sId);
+              }
+              if (sLbl.length() > 0) {
+                removeScheduleByLabel(sLbl);
+              }
+            }
+          } else if (entity == "labNotes") {
+            if (action == "create" || action == "update") {
+              String nId = extractJsonString(msg, "id");
+              String nUser = extractJsonString(msg, "username");
+              String nTitle = extractJsonString(msg, "title");
+              String nDate = extractJsonString(msg, "date");
+              String nTime = extractJsonString(msg, "time");
+              String nPurpose = extractJsonString(msg, "purpose");
+              String nStatus = extractJsonString(msg, "status");
+              if (nId.length() == 0) nId = "note-" + String(millis());
+              if (nStatus.length() == 0) nStatus = "confirmed";
+              addOrUpdateLabNote(nId, nUser, nTitle, nDate, nTime, nPurpose, nStatus);
+            } else if (action == "delete") {
+              String nId = extractJsonString(msg, "id");
+              if (nId.length() > 0) {
+                removeLabNote(nId);
+              }
             }
           }
-        } else if (entity == "schedules") {
-          if (action == "create" || action == "update") {
-            String sId = extractJsonString(msg, "id");
-            String sLbl = extractJsonString(msg, "label");
-            String sRole = extractJsonString(msg, "role");
-            String sTime = extractJsonString(msg, "time");
-            String sDays = extractDaysString(msg);
-            String sStart = extractJsonString(msg, "startTime");
-            String sEnd = extractJsonString(msg, "endTime");
-            String sStat = extractJsonString(msg, "status");
-            String sDayConfigs = extractDayConfigsJson(msg);
-            if (sId.length() == 0) sId = String(millis());
-            if (sRole.length() == 0) sRole = "user";
-            if (sStat.length() == 0) sStat = "active";
-            addOrUpdateSchedule(sId, sLbl, sRole, sTime, sDays, sStart, sEnd, sStat, sDayConfigs);
-          } else if (action == "delete") {
-            String sId = extractJsonString(msg, "id");
-            String sLbl = extractJsonString(msg, "label");
-            if (sId.length() > 0) {
-              removeSchedule(sId);
-            }
-            if (sLbl.length() > 0) {
-              removeScheduleByLabel(sLbl);
-            }
-          }
-        } else if (entity == "labNotes") {
-          if (action == "create" || action == "update") {
-            String nId = extractJsonString(msg, "id");
-            String nUser = extractJsonString(msg, "username");
-            String nTitle = extractJsonString(msg, "title");
-            String nDate = extractJsonString(msg, "date");
-            String nTime = extractJsonString(msg, "time");
-            String nPurpose = extractJsonString(msg, "purpose");
-            String nStatus = extractJsonString(msg, "status");
-            if (nId.length() == 0) nId = "note-" + String(millis());
-            if (nStatus.length() == 0) nStatus = "confirmed";
-            addOrUpdateLabNote(nId, nUser, nTitle, nDate, nTime, nPurpose, nStatus);
-          } else if (action == "delete") {
-            String nId = extractJsonString(msg, "id");
-            if (nId.length() > 0) {
-              removeLabNote(nId);
-            }
-          }
-        }
 
-        // Broadcast updated state & users & schedules & requests to all devices
-        ws.textAll(buildSyncJson());
-        return;
+          // Broadcast updated state & users & schedules & requests to all devices
+          ws.textAll(buildSyncJson());
+          return;
+        }
       }
     }
   }
@@ -1327,7 +1328,7 @@ void setup() {
 
   // Serve LittleFS web files
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-    if (LittleFS.exists("/index.html")) {
+    if (LittleFS.exists("/index.html.gz")) {
       request->send(LittleFS, "/index.html", "text/html");
     } else {
       request->send(200, "text/plain", "SmartLock ESP8266 WebSocket Server Ready at ws://" + myIP.toString() + "/ws");
