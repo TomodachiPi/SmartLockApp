@@ -28,28 +28,10 @@ export const HistoryScreen: React.FC = () => {
   const [pageSize, setPageSize] = useState(5);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
 
-  // Normal User recent visits vs Admin all records
-  // All users, admin or not, can see who relinquished access and who gained access
+  // Admin or normal user: show ALL events (lock/unlock/transfer room custody) in the activity log
   const relevantHistory = useMemo(() => {
-    if (!isAdmin) {
-      return history.filter((item) => {
-        // Own user events
-        if (item.username.toLowerCase() === currentUser?.username.toLowerCase()) {
-          return true;
-        }
-        // Room transfer/handover logs: all users can see who relinquished access and who gained access
-        const notesLower = (item.notes || '').toLowerCase();
-        const isHandoverLog =
-          notesLower.includes('relinquished room access') ||
-          notesLower.includes('gained room access') ||
-          notesLower.includes('relinquished') ||
-          notesLower.includes('gained access');
-
-        return isHandoverLog;
-      });
-    }
     return history;
-  }, [history, isAdmin, currentUser]);
+  }, [history]);
 
   // Filtering
   const filteredHistory = useMemo(() => {
@@ -99,29 +81,28 @@ export const HistoryScreen: React.FC = () => {
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-lg font-black text-white tracking-tight">
-              {isAdmin ? 'Access Log & Statistics' : 'Recent Visits & Statistics'}
+              Access History {isAdmin && "& Statistics"}
             </h2>
           </div>
           <p className="text-xs text-slate-400">
-            SmartLock Access History and Statistics
+            View SmartLock Unit's Access History {isAdmin && "and Statistics"}
           </p>
         </div>
 
-        {isAdmin && 
-        <>
+        {isAdmin &&
           <button
-          id="toggle-analytics-btn"
-          onClick={() => setShowCharts(!showCharts)}
-          className={`text-xs px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-            showCharts
-              ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 shadow-[0_0_12px_rgba(6,182,212,0.3)]'
-              : 'bg-[#111827] text-cyan-400 border border-cyan-500/30 hover:bg-[#1e293b]'
-          }`}
-        >
-          <BarChart2 className="w-3.5 h-3.5" />
+            id="toggle-analytics-btn"
+            onClick={() => setShowCharts(!showCharts)}
+            className={`text-xs px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+              showCharts
+                ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 shadow-[0_0_12px_rgba(6,182,212,0.3)]'
+                : 'bg-[#111827] text-cyan-400 border border-cyan-500/30 hover:bg-[#1e293b]'
+            }`}
+          >
+            <BarChart2 className="w-3.5 h-3.5" />
             {showCharts ? 'Hide Visuals' : 'View Analytics'}
           </button>
-        </>}
+        }
       </div>
 
       <div className="px-4 space-y-4">
@@ -157,7 +138,7 @@ export const HistoryScreen: React.FC = () => {
           <input
             id="global-search-input"
             type="text"
-            placeholder={isAdmin ? "Filter by user, date, timestamp, or notes..." : "Search your entries..."}
+            placeholder="Filter by user, date, timestamp, or notes..."
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.target.value);

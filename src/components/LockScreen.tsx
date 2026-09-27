@@ -176,12 +176,12 @@ export const LockScreen: React.FC = () => {
         </div>
       </div>
 
-      {/* Lock Status Bar with Consolidated Clickable Notifications for Admin & Normal Users */}
+      {/* Lock Status Bar with Consolidated Clickable Notifications for Admin & Normal Users*/}
       <div className="px-4">
         <div className="bg-[#111827] border border-slate-800/80 rounded-xl p-2.5 flex items-center justify-between gap-1.5 text-[10px] font-mono text-slate-300 overflow-x-auto no-scrollbar">
           <div className="flex items-center gap-1.5 shrink-0">
             <Wifi className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Lock WiFi AP -42dBm 1.0 Mbps</span>
+            <span>SmartLock WiFi Acess Point</span>
           </div>
 
           <button

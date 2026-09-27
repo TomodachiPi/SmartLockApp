@@ -1,3 +1,6 @@
+-42dBm 1.0 Mbps
+
+
             {/* Currently Selected User Confirmation Badge */}
             {selectedUsername && (
               <div className="mt-2 pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs">

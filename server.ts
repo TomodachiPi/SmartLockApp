@@ -3,6 +3,7 @@ import http from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { generateMonthHistory } from './src/data/mockMonthHistory.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -130,20 +131,7 @@ let userSchedules: any[] = [
 ];
 
 let roomTransfers: any[] = [];
-let history: any[] = [
-  {
-    id: 'hist-init-1',
-    username: 'Administrator',
-    permission: 'Admin Privilege',
-    userType: 'admin',
-    locked: false,
-    startingTime: '8:00 AM',
-    endingTime: '8:05 AM',
-    date: 'Sep 23, 2026',
-    timestamp: Date.now() - 3600000,
-    notes: 'Morning facility access via ESP8266 controller',
-  },
-];
+let history: any[] = generateMonthHistory();
 let labNotes: any[] = [];
 let emergencyAlerts: any[] = [];
 let adminNotifications: any[] = [];
@@ -494,11 +482,17 @@ wss.on('connection', (ws) => {
 
           if (entity === 'profiles') {
             if (action === 'create') {
-              profiles = [...profiles.filter((p) => p.username.toLowerCase() !== payload.username.toLowerCase()), payload];
+              const rawType = String(payload?.type || parsed?.userType || '').toLowerCase();
+              const cleanType = (rawType === 'admin' || (payload?.username || '').toLowerCase() === 'administrator') ? 'admin' : 'user';
+              const cleanProf = { ...payload, type: cleanType };
+              profiles = [...profiles.filter((p) => p.username.toLowerCase() !== payload.username.toLowerCase()), cleanProf];
             } else if (action === 'update_avatar' || action === 'update') {
               const uName = (payload?.username || parsed.username || '').toLowerCase();
               const avIdx = payload?.avatarIndex !== undefined ? Number(payload.avatarIndex) : (parsed.avatarIndex !== undefined ? Number(parsed.avatarIndex) : undefined);
               const avUrl = payload?.avatarUrl || parsed.avatarUrl || (avIdx !== undefined ? String(avIdx) : undefined);
+              const rawType = payload?.type !== undefined ? String(payload.type).toLowerCase() : undefined;
+              const cleanType = rawType !== undefined ? ((rawType === 'admin' || uName === 'administrator') ? 'admin' : 'user') : undefined;
+
               if (uName) {
                 profiles = profiles.map((p) => {
                   if (p.username.toLowerCase() === uName) {
@@ -506,6 +500,7 @@ wss.on('connection', (ws) => {
                     return {
                       ...p,
                       ...(payload || {}),
+                      type: cleanType !== undefined ? cleanType : p.type,
                       avatarIndex: finalIndex,
                       avatarUrl: String(finalIndex),
                     };
@@ -528,7 +523,8 @@ wss.on('connection', (ws) => {
             } else if (action === 'approve') {
               const req = profileRequests.find((r) => r.username.toLowerCase() === payload.username.toLowerCase());
               const userPass = payload.password || req?.password || 'user';
-              const userType = payload.type || req?.type || 'user';
+              const rawUserType = String(payload.type || req?.type || '').toLowerCase();
+              const userType = (rawUserType === 'admin' || payload.username.toLowerCase() === 'administrator') ? 'admin' : 'user';
               const userTime = payload.time || req?.time || [0, 1440];
               profiles = [
                 ...profiles.filter((p) => p.username.toLowerCase() !== payload.username.toLowerCase()),
@@ -549,10 +545,11 @@ wss.on('connection', (ws) => {
               profileRequests = profileRequests.filter((r) => r.username.toLowerCase() !== payload.username.toLowerCase());
             }
           } else if (entity === 'schedules') {
+            const rawRole = String(payload?.role || parsed.role || parsed.userType || '').toLowerCase();
             const schedObj = payload || {
               id: parsed.id,
               label: parsed.label,
-              role: parsed.role,
+              role: (rawRole === 'admin' || (parsed.label || '').toLowerCase() === 'administrator') ? 'admin' : 'user',
               time: parsed.time,
               days: parsed.daysArray || (parsed.days ? parsed.days.split(',') : []),
               startTime: parsed.startTime,
@@ -560,20 +557,27 @@ wss.on('connection', (ws) => {
               status: parsed.status,
               dayConfigs: parsed.dayConfigs,
             };
+            const cleanRole = (String(schedObj.role).toLowerCase() === 'admin' || (schedObj.label || '').toLowerCase() === 'administrator') ? 'admin' : 'user';
+            const cleanSched = { ...schedObj, role: cleanRole };
+
             if (action === 'create') {
-              const newSched = { ...schedObj, id: schedObj.id || Date.now().toString() };
+              const newSched = { ...cleanSched, id: cleanSched.id || Date.now().toString() };
               userSchedules = [...userSchedules.filter((s) => s.id !== newSched.id && s.label.toLowerCase() !== newSched.label.toLowerCase()), newSched];
             } else if (action === 'update') {
-              const exists = userSchedules.some((s) => s.id === schedObj.id || s.label.toLowerCase() === schedObj.label.toLowerCase());
+              const exists = userSchedules.some((s) => s.id === cleanSched.id || s.label.toLowerCase() === cleanSched.label.toLowerCase());
               if (exists) {
-                userSchedules = userSchedules.map((s) => (s.id === schedObj.id || s.label.toLowerCase() === schedObj.label.toLowerCase() ? { ...s, ...schedObj } : s));
+                userSchedules = userSchedules.map((s) => (s.id === cleanSched.id || s.label.toLowerCase() === cleanSched.label.toLowerCase() ? { ...s, ...cleanSched } : s));
               } else {
-                userSchedules = [...userSchedules, schedObj];
+                userSchedules = [...userSchedules, cleanSched];
               }
             } else if (action === 'delete') {
-              const targetId = schedObj.id || parsed.id;
-              const targetLabel = schedObj.label || parsed.label;
-              userSchedules = userSchedules.filter((s) => s.id !== targetId && (!targetLabel || s.label.toLowerCase() !== targetLabel.toLowerCase()));
+              const targetId = cleanSched.id || parsed.id || payload?.id;
+              const targetLabel = (cleanSched.label || parsed.label || payload?.label || '').toLowerCase();
+              userSchedules = userSchedules.filter(
+                (s) =>
+                  (targetId ? s.id !== targetId : true) &&
+                  (!targetLabel || s.label.toLowerCase() !== targetLabel)
+              );
             }
           } else if (entity === 'labNotes') {
             if (action === 'create') {
@@ -593,8 +597,18 @@ wss.on('connection', (ws) => {
             } else if (action === 'mark_read' && payload?.id) {
               adminNotifications = adminNotifications.map((n) => n.id === payload.id ? { ...n, read: true } : n);
             }
-          } else if (entity === 'history' && action === 'clear') {
-            history = [];
+          } else if (entity === 'history') {
+            if (action === 'clear') {
+              history = [];
+            } else if (action === 'seed') {
+              history = Array.isArray(payload) && payload.length > 0 ? payload : generateMonthHistory();
+            } else if (action === 'add' || action === 'create') {
+              if (payload && payload.id) {
+                if (!history.some((h) => h.id === payload.id)) {
+                  history = [payload, ...history];
+                }
+              }
+            }
           }
 
           broadcast(buildSyncPayload());

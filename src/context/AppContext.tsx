@@ -409,7 +409,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [history, setHistory] = useState<HistoryRecord[]>(() => {
     try {
       const saved = localStorage.getItem('history_record');
-      return saved ? JSON.parse(saved) : defaultHistory;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+      return defaultHistory;
     } catch {
       return defaultHistory;
     }
@@ -430,10 +436,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          const filtered = parsed.filter(
+          return parsed.filter(
             (s: any) => s.label !== 'Sarah_Chen' && s.label !== 'Alex_Rivera'
           );
-          return filtered.length > 0 ? filtered : defaultSchedules;
         }
       }
       return defaultSchedules;
@@ -489,6 +494,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const initialLockTimeRef = useRef<number | null>(null);
   const simTimerRef = useRef<any>(null);
   const localScheduleModTimestampsRef = useRef<Map<string, number>>(new Map());
+  const localScheduleDeletedTimestampsRef = useRef<Map<string, number>>(new Map());
   const localAvatarModTimestampsRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
@@ -668,9 +674,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // Update full synced entities if provided in response
       if (Array.isArray(parsed.profiles)) {
-        const cleanProfiles = parsed.profiles.filter(
-          (p: any) => p.username !== 'Sarah_Chen' && p.username !== 'Alex_Rivera'
-        );
+        const cleanProfiles = parsed.profiles
+          .filter((p: any) => p.username !== 'Sarah_Chen' && p.username !== 'Alex_Rivera')
+          .map((p: any) => {
+            const rawType = String(p.type || '').toLowerCase();
+            const cleanType = (rawType === 'admin' || p.username.toLowerCase() === 'administrator') ? 'admin' : 'user';
+            return {
+              ...p,
+              type: cleanType as 'admin' | 'user',
+            };
+          });
         const currentActiveUsername = currentUserRef.current?.username.toLowerCase();
         const now = Date.now();
 
@@ -715,10 +728,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             );
             if (match) {
               const serverIdx = parseAvatarIndex(match.avatarIndex !== undefined ? match.avatarIndex : match.avatarUrl);
-              if (serverIdx !== currentUserRef.current.avatarIndex) {
+              const serverType: 'admin' | 'user' = (match.type === 'admin' || match.username.toLowerCase() === 'administrator') ? 'admin' : 'user';
+              if (serverIdx !== currentUserRef.current.avatarIndex || serverType !== currentUserRef.current.type) {
                 setCurrentUser((prev) => {
                   if (!prev) return prev;
-                  const updated = { ...prev, avatarIndex: serverIdx, avatarUrl: String(serverIdx) };
+                  const updated: Profile = { ...prev, type: serverType, avatarIndex: serverIdx, avatarUrl: String(serverIdx) };
                   try {
                     localStorage.setItem('current_user', JSON.stringify(updated));
                     localStorage.setItem(`smartlock_avatar_${uKey}`, String(serverIdx));
@@ -734,57 +748,113 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setProfileRequests(parsed.profileRequests);
       }
       if (Array.isArray(parsed.userSchedules)) {
-        const cleanSchedules = parsed.userSchedules.filter(
-          (s: any) => s.label !== 'Sarah_Chen' && s.label !== 'Alex_Rivera'
-        );
+        const cleanSchedules = parsed.userSchedules
+          .filter((s: any) => s.label !== 'Sarah_Chen' && s.label !== 'Alex_Rivera')
+          .map((s: any) => {
+            const rawRole = String(s.role || '').toLowerCase();
+            const cleanRole = (rawRole === 'admin' || s.label.toLowerCase() === 'administrator') ? 'admin' : 'user';
+            return {
+              ...s,
+              role: cleanRole as 'admin' | 'user',
+            };
+          });
         const incomingMsgTimestamp = parsed.timestamp || 0;
         const now = Date.now();
 
         setUserSchedules((prevSchedules) => {
-          const merged = [...prevSchedules];
+          // Filter out incoming schedules that were recently deleted locally (within 15s)
+          const validIncoming = cleanSchedules.filter((incSched: UserSchedule) => {
+            const labelKey = (incSched.label || '').toLowerCase();
+            const idKey = incSched.id;
+            const lastDeleted = Math.max(
+              localScheduleDeletedTimestampsRef.current.get(labelKey) || 0,
+              localScheduleDeletedTimestampsRef.current.get(idKey) || 0
+            );
+            if (now - lastDeleted < 15000 && incomingMsgTimestamp < lastDeleted) {
+              return false;
+            }
+            return true;
+          });
 
-          cleanSchedules.forEach((incomingSched: UserSchedule) => {
+          // Map through validIncoming and preserve dayConfigs if edited locally
+          const result: UserSchedule[] = validIncoming.map((incomingSched: UserSchedule) => {
             const labelKey = (incomingSched.label || '').toLowerCase();
             const idKey = incomingSched.id;
             const lastLocalMod = Math.max(
               localScheduleModTimestampsRef.current.get(labelKey) || 0,
               localScheduleModTimestampsRef.current.get(idKey) || 0
             );
-
-            // If we recently updated this schedule locally (within last 15s) and the incoming message is older, retain the local state!
             const isRecentlyEditedLocally = now - lastLocalMod < 15000;
-            const existingIdx = merged.findIndex(
-              (s) => s.id === incomingSched.id || s.label.toLowerCase() === labelKey
+            const localSched = prevSchedules.find(
+              (s) => s.id === incomingSched.id || (s.label || '').toLowerCase() === labelKey
             );
 
-            if (existingIdx >= 0) {
-              const localSched = merged[existingIdx];
-              if (isRecentlyEditedLocally && incomingMsgTimestamp < lastLocalMod) {
-                // Keep locally updated schedule to prevent polling reverts
-                return;
-              }
+            if (localSched && isRecentlyEditedLocally && incomingMsgTimestamp < lastLocalMod) {
+              return localSched;
+            }
 
-              merged[existingIdx] = {
-                ...incomingSched,
-                // Preserve dayConfigs if local has custom configured days and incoming doesn't or is generic
-                dayConfigs:
-                  incomingSched.dayConfigs && Object.keys(incomingSched.dayConfigs).length > 0
-                    ? incomingSched.dayConfigs
-                    : localSched.dayConfigs,
-              };
-            } else {
-              merged.push(incomingSched);
+            return {
+              ...incomingSched,
+              dayConfigs:
+                incomingSched.dayConfigs && Object.keys(incomingSched.dayConfigs).length > 0
+                  ? incomingSched.dayConfigs
+                  : localSched?.dayConfigs,
+            };
+          });
+
+          // Also preserve any newly created schedule in prevSchedules that hasn't arrived from server yet (created < 15s)
+          prevSchedules.forEach((prevSched) => {
+            const labelKey = (prevSched.label || '').toLowerCase();
+            const idKey = prevSched.id;
+            const lastLocalMod = Math.max(
+              localScheduleModTimestampsRef.current.get(labelKey) || 0,
+              localScheduleModTimestampsRef.current.get(idKey) || 0
+            );
+            const lastDeleted = Math.max(
+              localScheduleDeletedTimestampsRef.current.get(labelKey) || 0,
+              localScheduleDeletedTimestampsRef.current.get(idKey) || 0
+            );
+            const isRecentlyCreated = now - lastLocalMod < 15000 && now - lastDeleted >= 15000;
+            const existsInResult = result.some(
+              (s) => s.id === prevSched.id || (s.label || '').toLowerCase() === labelKey
+            );
+            if (!existsInResult && isRecentlyCreated) {
+              result.push(prevSched);
             }
           });
 
-          return merged;
+          return result;
         });
       }
       if (Array.isArray(parsed.roomTransfers)) {
         setRoomTransfers(parsed.roomTransfers);
       }
       if (Array.isArray(parsed.history)) {
-        setHistory(parsed.history);
+        if (parsed.history.length === 0) {
+          // If empty history received on initial sync, initialize with 1 month sample data and push to hardware
+          const monthMock = generateMonthHistory();
+          setHistory(monthMock);
+          sendWsJson({
+            type: 'DATA_UPDATE_ACTION',
+            entity: 'history',
+            action: 'seed',
+            payload: monthMock,
+            timestamp: Date.now(),
+          });
+        } else {
+          setHistory((prev) => {
+            const merged = [...parsed.history];
+            prev.forEach((localItem) => {
+              if (!merged.some((m) => m.id === localItem.id)) {
+                if (Date.now() - (localItem.timestamp || 0) < 60000) {
+                  merged.push(localItem);
+                }
+              }
+            });
+            merged.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+            return merged;
+          });
+        }
       }
       if (Array.isArray(parsed.labNotes)) {
         setLabNotes(parsed.labNotes);
@@ -806,14 +876,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         } else if (action === 'approve' && payload) {
           setProfileRequests((prev) => prev.filter((r) => r.username.toLowerCase() !== payload.username.toLowerCase()));
           if (payload.password) {
+            const rawType = String(payload.type || '').toLowerCase();
+            const cleanType = (rawType === 'admin' || payload.username.toLowerCase() === 'administrator') ? 'admin' : 'user';
             setProfiles((prev) => {
               if (prev.some((p) => p.username.toLowerCase() === payload.username.toLowerCase())) return prev;
               const newProf: Profile = {
                 username: payload.username,
                 password: payload.password,
-                type: payload.type || 'user',
+                type: cleanType as 'admin' | 'user',
                 time: payload.time || [0, 1440],
-                permission: payload.type === 'admin' ? 'Admin Privilege' : 'Standard User Access',
+                permission: cleanType === 'admin' ? 'Admin Privilege' : 'Standard User Access',
                 avatarUrl: user_png,
                 joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
                 isOnline: false,
@@ -827,15 +899,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       } else if (entity === 'profiles') {
         if (action === 'create' && payload) {
+          const rawType = String(payload.type || '').toLowerCase();
+          const cleanType = (rawType === 'admin' || payload.username.toLowerCase() === 'administrator') ? 'admin' : 'user';
+          const cleanProf = { ...payload, type: cleanType };
           setProfiles((prev) => {
             if (prev.some((p) => p.username.toLowerCase() === payload.username.toLowerCase())) return prev;
-            return [...prev, payload];
+            return [...prev, cleanProf];
           });
         } else if ((action === 'update' || action === 'update_avatar') && payload) {
           const uName = (payload.username || parsed.username || '').toLowerCase();
           const rawAv = payload.avatarIndex !== undefined ? payload.avatarIndex : (payload.avatarUrl !== undefined ? payload.avatarUrl : (parsed.avatarIndex !== undefined ? parsed.avatarIndex : parsed.avatarUrl));
           const hasAvatar = rawAv !== undefined && rawAv !== null && rawAv !== '';
           const newIdx = hasAvatar ? parseAvatarIndex(rawAv) : undefined;
+          const rawType = payload.type !== undefined ? String(payload.type).toLowerCase() : undefined;
+          const cleanType = rawType !== undefined ? ((rawType === 'admin' || uName === 'administrator') ? 'admin' : 'user') : undefined;
 
           if (uName && newIdx !== undefined) {
             localAvatarModTimestampsRef.current.set(uName, Date.now());
@@ -849,20 +926,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 ? {
                     ...p,
                     ...payload,
+                    type: cleanType !== undefined ? (cleanType as 'admin' | 'user') : p.type,
                     avatarIndex: newIdx !== undefined ? newIdx : p.avatarIndex,
                     avatarUrl: newIdx !== undefined ? String(newIdx) : p.avatarUrl,
                   }
                 : p
             )
           );
-          if (currentUserRef.current?.username.toLowerCase() === uName && newIdx !== undefined) {
+          if (currentUserRef.current?.username.toLowerCase() === uName) {
             setCurrentUser((prev) => {
               if (!prev) return prev;
               const updated = {
                 ...prev,
                 ...payload,
-                avatarIndex: newIdx,
-                avatarUrl: String(newIdx),
+                type: cleanType !== undefined ? (cleanType as 'admin' | 'user') : prev.type,
+                avatarIndex: newIdx !== undefined ? newIdx : prev.avatarIndex,
+                avatarUrl: newIdx !== undefined ? String(newIdx) : prev.avatarUrl,
               };
               try {
                 localStorage.setItem('current_user', JSON.stringify(updated));
@@ -883,14 +962,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       } else if (entity === 'schedules') {
         if (action === 'create' && payload) {
+          const rawRole = String(payload.role || '').toLowerCase();
+          const cleanRole = (rawRole === 'admin' || (payload.label || '').toLowerCase() === 'administrator') ? 'admin' : 'user';
+          const cleanSched = { ...payload, role: cleanRole };
           setUserSchedules((prev) => {
             if (prev.some((s) => s.id === payload.id)) return prev;
-            return [...prev, payload];
+            return [...prev, cleanSched];
           });
         } else if (action === 'update' && payload) {
-          setUserSchedules((prev) => prev.map((s) => (s.id === payload.id ? { ...s, ...payload } : s)));
+          const rawRole = payload.role !== undefined ? String(payload.role).toLowerCase() : undefined;
+          const cleanRole = rawRole !== undefined ? ((rawRole === 'admin' || (payload.label || '').toLowerCase() === 'administrator') ? 'admin' : 'user') : undefined;
+          setUserSchedules((prev) => prev.map((s) => (s.id === payload.id ? { ...s, ...payload, ...(cleanRole ? { role: cleanRole as 'admin' | 'user' } : {}) } : s)));
         } else if (action === 'delete' && payload) {
-          setUserSchedules((prev) => prev.filter((s) => s.id !== payload.id));
+          const targetId = payload.id;
+          const targetLabel = (payload.label || '').toLowerCase();
+          setUserSchedules((prev) =>
+            prev.filter(
+              (s) =>
+                (targetId ? s.id !== targetId : true) &&
+                (!targetLabel || s.label.toLowerCase() !== targetLabel)
+            )
+          );
+        }
+      } else if (entity === 'history') {
+        if (action === 'seed' && Array.isArray(payload)) {
+          setHistory(payload);
+        } else if ((action === 'add' || action === 'create') && payload && payload.id) {
+          setHistory((prev) => {
+            if (prev.some((h) => h.id === payload.id)) return prev;
+            const updated = [payload, ...prev];
+            try {
+              localStorage.setItem('history_record', JSON.stringify(updated));
+            } catch {}
+            return updated;
+          });
+        } else if (action === 'clear') {
+          setHistory([]);
+          try {
+            localStorage.setItem('history_record', JSON.stringify([]));
+          } catch {}
         }
       } else if (entity === 'labNotes') {
         if (action === 'create' && payload) {
@@ -1032,7 +1142,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         } else if (actionData.type === 'ROOM_TRANSFER_ACTION' && actionData.subType === 'respond' && actionData.accept) {
           if (actionData.toUsername) setActiveRoomHolder(actionData.toUsername);
         } else if (actionData.type === 'DATA_UPDATE_ACTION') {
-          if (actionData.entity === 'labNotes') {
+          if (actionData.entity === 'history') {
+            if ((actionData.action === 'add' || actionData.action === 'create') && actionData.payload) {
+              setHistory((prev) => {
+                if (prev.some((h) => h.id === actionData.payload.id)) return prev;
+                return [actionData.payload, ...prev];
+              });
+            } else if (actionData.action === 'seed' && Array.isArray(actionData.payload)) {
+              setHistory(actionData.payload);
+            } else if (actionData.action === 'clear') {
+              setHistory([]);
+            }
+          } else if (actionData.entity === 'labNotes') {
             if (actionData.action === 'create' && actionData.payload) {
               setLabNotes((prev) => [actionData.payload, ...prev.filter((n) => n.id !== actionData.payload.id)]);
             } else if (actionData.action === 'update' && actionData.payload) {
@@ -1147,6 +1268,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             notes: willBeLocked ? 'Door locked securely via WebSocket' : 'Door opened with authorized credential via WebSocket',
           };
           setHistory((prev) => [newRecord, ...prev]);
+          sendWsJson({
+            type: 'DATA_UPDATE_ACTION',
+            entity: 'history',
+            action: 'add',
+            payload: newRecord,
+            timestamp: Date.now(),
+          });
 
           if (!willBeLocked) {
             setActiveRoomHolder(actingUser);
@@ -1230,6 +1358,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           notes: `EMERGENCY OVERRIDE UNLOCKED: ${reason}${notes ? ` - ${notes}` : ''}`,
         };
         setHistory((prev) => [newRecord, ...prev]);
+        sendWsJson({
+          type: 'DATA_UPDATE_ACTION',
+          entity: 'history',
+          action: 'add',
+          payload: newRecord,
+          timestamp: Date.now(),
+        });
       }, 2000);
     }
   };
@@ -1371,17 +1506,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const gainRecord: HistoryRecord = {
         id: `hist-gain-${Date.now()}`,
         username: gaining,
-        permission: 'Standard User Access',
-        userType: 'user',
+        permission: gaining.toLowerCase() === 'administrator' ? 'Admin Privilege' : 'Standard User Access',
+        userType: gaining.toLowerCase() === 'administrator' ? 'admin' : 'user',
         locked: false,
         startingTime: timeStr,
         endingTime: timeStr,
         date: dateStr,
         timestamp: Date.now(),
-        notes: `Gained room access for Laboratory SmartLock #1 (Transferred from ${relinquishing})`,
+        notes: `Gained room custody for Laboratory SmartLock #1 (Transferred from ${relinquishing})`,
       };
 
       setHistory((prev) => [gainRecord, ...prev]);
+      sendWsJson({
+        type: 'DATA_UPDATE_ACTION',
+        entity: 'history',
+        action: 'add',
+        payload: gainRecord,
+        timestamp: Date.now(),
+      });
 
       const notif: AdminLockNotification = {
         id: `notif-transfer-${Date.now()}`,
@@ -1467,6 +1609,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {}
     setActiveTab('lock');
     setWelcomeMessage(`Welcome, ${updatedUser.username}! — The SmartLock Unit is ready.`);
+
+    // Initialize history with 1-month mock data if empty or on login so activity log is populated
+    setHistory((prev) => {
+      if (!prev || prev.length === 0) {
+        const monthMock = generateMonthHistory();
+        try {
+          localStorage.setItem('history_record', JSON.stringify(monthMock));
+        } catch {}
+        sendWsJson({
+          type: 'DATA_UPDATE_ACTION',
+          entity: 'history',
+          action: 'seed',
+          payload: monthMock,
+          timestamp: Date.now(),
+        });
+        return monthMock;
+      }
+      return prev;
+    });
 
     sendWsJson({
       type: 'USER_PRESENCE',
@@ -1653,13 +1814,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const avIdx = parseAvatarIndex(userData.avatarIndex !== undefined ? userData.avatarIndex : userData.avatarUrl);
 
+    const cleanType = (userData.type === 'admin' || cleanUsername.toLowerCase() === 'administrator') ? 'admin' : 'user';
     const newProfile: Profile = {
       ...userData,
       username: cleanUsername,
+      type: cleanType as 'admin' | 'user',
       joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       isOnline: false,
       lastActive: 'Never logged in',
-      permission: userData.permission || (userData.type === 'admin' ? 'Admin Privilege' : 'Standard User Access'),
+      permission: userData.permission || (cleanType === 'admin' ? 'Admin Privilege' : 'Standard User Access'),
       avatarIndex: avIdx,
       avatarUrl: String(avIdx),
     };
@@ -1670,6 +1833,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       type: 'DATA_UPDATE_ACTION',
       entity: 'profiles',
       action: 'create',
+      username: cleanUsername,
+      userType: cleanType,
+      role: cleanType,
+      permission: newProfile.permission,
       payload: newProfile,
       timestamp: Date.now(),
     });
@@ -1685,10 +1852,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ? parseAvatarIndex(updatedData.avatarIndex)
       : (updatedData.avatarUrl !== undefined ? parseAvatarIndex(updatedData.avatarUrl) : (targetUser.avatarIndex ?? 0));
 
+    const cleanUsername = updatedData.username ? updatedData.username.trim() : targetUser.username;
+    const cleanType = ((updatedData.type !== undefined ? updatedData.type : targetUser.type) === 'admin' || cleanUsername.toLowerCase() === 'administrator') ? 'admin' : 'user';
+
     const updatedProfile: Profile = {
       ...targetUser,
       ...updatedData,
-      username: updatedData.username ? updatedData.username.trim() : targetUser.username,
+      username: cleanUsername,
+      type: cleanType as 'admin' | 'user',
       avatarIndex: avIdx,
       avatarUrl: String(avIdx),
     };
@@ -1700,6 +1871,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       type: 'DATA_UPDATE_ACTION',
       entity: 'profiles',
       action: 'update',
+      username: cleanUsername,
+      userType: cleanType,
+      role: cleanType,
+      permission: updatedProfile.permission,
       payload: updatedProfile,
       timestamp: Date.now(),
     });
@@ -1732,6 +1907,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       type: 'DATA_UPDATE_ACTION',
       entity: 'profiles',
       action: 'delete',
+      username: cleanUsername,
       payload: { username: cleanUsername },
       timestamp: Date.now(),
     });
@@ -1741,7 +1917,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Schedule Management
   const addSchedule = (sched: Omit<UserSchedule, 'id'>) => {
-    const newSched: UserSchedule = { ...sched, id: Date.now().toString() };
+    const cleanRole = (sched.role === 'admin' || (sched.label || '').toLowerCase() === 'administrator') ? 'admin' : 'user';
+    const newSched: UserSchedule = { ...sched, role: cleanRole, id: Date.now().toString() };
     const now = Date.now();
     localScheduleModTimestampsRef.current.set((newSched.label || '').toLowerCase(), now);
     localScheduleModTimestampsRef.current.set(newSched.id, now);
@@ -1769,7 +1946,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       action: 'create',
       id: newSched.id,
       label: newSched.label,
-      role: newSched.role,
+      role: cleanRole,
+      userType: cleanRole,
       time: newSched.time,
       days: daysStr,
       daysArray: newSched.days,
@@ -1779,6 +1957,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       dayConfigs: newSched.dayConfigs,
       payload: {
         ...newSched,
+        role: cleanRole,
         days: newSched.days,
         daysStr,
       },
@@ -1787,46 +1966,50 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateSchedule = (sched: UserSchedule) => {
+    const cleanRole = (sched.role === 'admin' || (sched.label || '').toLowerCase() === 'administrator') ? 'admin' : 'user';
+    const cleanSched: UserSchedule = { ...sched, role: cleanRole };
     const now = Date.now();
-    localScheduleModTimestampsRef.current.set((sched.label || '').toLowerCase(), now);
-    localScheduleModTimestampsRef.current.set(sched.id, now);
+    localScheduleModTimestampsRef.current.set((cleanSched.label || '').toLowerCase(), now);
+    localScheduleModTimestampsRef.current.set(cleanSched.id, now);
 
     setUserSchedules((prev) => {
-      const exists = prev.some((s) => s.id === sched.id || s.label.toLowerCase() === sched.label.toLowerCase());
+      const exists = prev.some((s) => s.id === cleanSched.id || s.label.toLowerCase() === cleanSched.label.toLowerCase());
       if (exists) {
-        return prev.map((s) => (s.id === sched.id || s.label.toLowerCase() === sched.label.toLowerCase() ? { ...s, ...sched } : s));
+        return prev.map((s) => (s.id === cleanSched.id || s.label.toLowerCase() === cleanSched.label.toLowerCase() ? cleanSched : s));
       }
-      return [...prev, sched];
+      return [...prev, cleanSched];
     });
 
     try {
       const existing = JSON.parse(localStorage.getItem('user_schedules') || '[]');
-      const updated = existing.some((s: any) => s.id === sched.id || s.label.toLowerCase() === sched.label.toLowerCase())
-        ? existing.map((s: any) => (s.id === sched.id || s.label.toLowerCase() === sched.label.toLowerCase() ? { ...s, ...sched } : s))
-        : [...existing, sched];
+      const updated = existing.some((s: any) => s.id === cleanSched.id || s.label.toLowerCase() === cleanSched.label.toLowerCase())
+        ? existing.map((s: any) => (s.id === cleanSched.id || s.label.toLowerCase() === cleanSched.label.toLowerCase() ? cleanSched : s))
+        : [...existing, cleanSched];
       localStorage.setItem('user_schedules', JSON.stringify(updated));
     } catch {}
 
-    addWsLog('send', `[ESP8266 IoT] Access policy updated for "${sched.label}" (${sched.time})`);
+    addWsLog('send', `[ESP8266 IoT] Access policy updated for "${cleanSched.label}" (${cleanSched.time})`);
 
-    const daysStr = Array.isArray(sched.days) ? sched.days.join(',') : sched.days;
+    const daysStr = Array.isArray(cleanSched.days) ? cleanSched.days.join(',') : cleanSched.days;
     sendWsJson({
       type: 'DATA_UPDATE_ACTION',
       entity: 'schedules',
       action: 'update',
-      id: sched.id,
-      label: sched.label,
-      role: sched.role,
-      time: sched.time,
+      id: cleanSched.id,
+      label: cleanSched.label,
+      role: cleanRole,
+      userType: cleanRole,
+      time: cleanSched.time,
       days: daysStr,
-      daysArray: sched.days,
-      startTime: sched.startTime,
-      endTime: sched.endTime,
-      status: sched.status,
-      dayConfigs: sched.dayConfigs,
+      daysArray: cleanSched.days,
+      startTime: cleanSched.startTime,
+      endTime: cleanSched.endTime,
+      status: cleanSched.status,
+      dayConfigs: cleanSched.dayConfigs,
       payload: {
-        ...sched,
-        days: sched.days,
+        ...cleanSched,
+        role: cleanRole,
+        days: cleanSched.days,
         daysStr,
       },
       timestamp: Date.now(),
@@ -1839,12 +2022,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const now = Date.now();
     localScheduleModTimestampsRef.current.set(targetLabel.toLowerCase(), now);
     localScheduleModTimestampsRef.current.set(id, now);
+    localScheduleDeletedTimestampsRef.current.set(targetLabel.toLowerCase(), now);
+    localScheduleDeletedTimestampsRef.current.set(id, now);
 
-    setUserSchedules((prev) => prev.filter((s) => s.id !== id));
+    setUserSchedules((prev) =>
+      prev.filter(
+        (s) =>
+          s.id !== id &&
+          (!targetLabel || s.label.toLowerCase() !== targetLabel.toLowerCase())
+      )
+    );
 
     try {
       const existing = JSON.parse(localStorage.getItem('user_schedules') || '[]');
-      const filtered = existing.filter((s: any) => s.id !== id);
+      const filtered = existing.filter(
+        (s: any) =>
+          s.id !== id &&
+          (!targetLabel || (s.label || '').toLowerCase() !== targetLabel.toLowerCase())
+      );
       localStorage.setItem('user_schedules', JSON.stringify(filtered));
     } catch {}
 

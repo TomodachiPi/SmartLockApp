@@ -105,6 +105,25 @@ int scheduleCount = 0;
 SmartLockLabNote labNoteList[MAX_LAB_NOTES];
 int labNoteCount = 0;
 
+struct SmartLockHistory {
+  String id;
+  String username;
+  String permission;
+  String userType;
+  bool locked;
+  String startingTime;
+  String endingTime;
+  String date;
+  unsigned long timestamp;
+  String notes;
+  bool isEmergencyOverride;
+  String emergencyReason;
+};
+
+const int MAX_HISTORY = 40;
+SmartLockHistory historyList[MAX_HISTORY];
+int historyCount = 0;
+
 void updateUserHeartbeat(String username, bool online = true) {
   if (username.length() == 0) return;
   for (int i = 0; i < userCount; i++) {
@@ -180,6 +199,21 @@ String extractJsonString(String json, String key) {
   }
   
   return "";
+}
+
+String extractPayloadString(String json, String key) {
+  int payloadIdx = json.indexOf("\"payload\":");
+  if (payloadIdx < 0) payloadIdx = json.indexOf("\"payload\" :");
+  if (payloadIdx >= 0) {
+    String sub = json.substring(payloadIdx);
+    String val = extractJsonString(sub, key);
+    if (val.length() > 0 && !val.equalsIgnoreCase("DATA_UPDATE_ACTION")) {
+      return val;
+    }
+  }
+  String direct = extractJsonString(json, key);
+  if (direct.equalsIgnoreCase("DATA_UPDATE_ACTION")) return "";
+  return direct;
 }
 
 // -------------------------------------------------------------
@@ -595,11 +629,6 @@ void loadSchedulesFromFS() {
     }
   }
   f.close();
-
-  if (scheduleCount == 0) {
-    initDefaultSchedules();
-    saveSchedulesToFS();
-  }
 }
 
 void addOrUpdateSchedule(String id, String label, String role, String time, String days, String startTime, String endTime, String status, String dayConfigsJson = "") {
@@ -749,6 +778,154 @@ void removeLabNote(String id) {
     labNoteCount--;
     saveLabNotesToFS();
   }
+}
+
+void initDefaultHistory() {
+  historyCount = 0;
+  // 1 month of realistic sample history exclusively using Administrator and User123test
+  historyList[historyCount++] = { "hist-sep26-4", "Administrator", "Admin Privilege", "admin", false, "3:00 PM", "3:10 PM", "Sep 26, 2026", 1790434800, "Afternoon facility inspection and perimeter check", false, "" };
+  historyList[historyCount++] = { "hist-sep26-3", "User123test", "Standard User Access", "user", true, "1:00 PM", "1:10 PM", "Sep 26, 2026", 1790427600, "Lab session concluded; deadbolt engaged via mobile app", false, "" };
+  historyList[historyCount++] = { "hist-sep26-2", "User123test", "Standard User Access", "user", false, "10:00 AM", "10:05 AM", "Sep 26, 2026", 1790416800, "Gained room custody for Laboratory SmartLock #1 (Transferred from Administrator)", false, "" };
+  historyList[historyCount++] = { "hist-sep26-1", "Administrator", "Admin Privilege", "admin", false, "8:00 AM", "8:30 AM", "Sep 26, 2026", 1790409600, "Morning facility perimeter unlock and system health audit", false, "" };
+  historyList[historyCount++] = { "hist-sep25-4", "Administrator", "Admin Privilege", "admin", true, "5:30 PM", "5:45 PM", "Sep 25, 2026", 1790347800, "Weekend lockdown sweep completed", false, "" };
+  historyList[historyCount++] = { "hist-sep25-3", "User123test", "Standard User Access", "user", true, "1:30 PM", "1:35 PM", "Sep 25, 2026", 1790333400, "Secured primary deadbolt following shift completion", false, "" };
+  historyList[historyCount++] = { "hist-sep25-2", "User123test", "Standard User Access", "user", false, "11:15 AM", "1:30 PM", "Sep 25, 2026", 1790325300, "Research sample cataloging & optics alignment", false, "" };
+  historyList[historyCount++] = { "hist-sep25-1", "Administrator", "Admin Privilege", "admin", false, "7:50 AM", "8:45 AM", "Sep 25, 2026", 1790313000, "Pre-shift facility inspection & ventilation test", false, "" };
+  historyList[historyCount++] = { "hist-sep24-3", "Administrator", "Admin Privilege", "admin", true, "4:15 PM", "4:25 PM", "Sep 24, 2026", 1790256900, "Routine evening lock engagement", false, "" };
+  historyList[historyCount++] = { "hist-sep24-2", "Administrator", "Admin Privilege", "admin", false, "1:00 PM", "1:05 PM", "Sep 24, 2026", 1790245200, "Gained room custody for Laboratory SmartLock #1 (Transferred from User123test)", false, "" };
+  historyList[historyCount++] = { "hist-sep24-1", "User123test", "Standard User Access", "user", false, "10:00 AM", "1:00 PM", "Sep 24, 2026", 1790234400, "Scheduled Thursday lab access: spectroscopy testing", false, "" };
+  historyList[historyCount++] = { "hist-sep23-3", "User123test", "Standard User Access", "user", true, "1:00 PM", "1:10 PM", "Sep 23, 2026", 1790158800, "Door locked securely via WebSocket", false, "" };
+  historyList[historyCount++] = { "hist-sep23-2", "User123test", "Standard User Access", "user", false, "10:30 AM", "1:00 PM", "Sep 23, 2026", 1790149800, "Authorized lab session and equipment check", false, "" };
+  historyList[historyCount++] = { "hist-sep23-1", "Administrator", "Admin Privilege", "admin", false, "8:45 AM", "9:30 AM", "Sep 23, 2026", 1790143500, "Morning facility access via ESP8266 controller", false, "" };
+  historyList[historyCount++] = { "hist-sep22-4", "Administrator", "Admin Privilege", "admin", true, "7:15 PM", "7:25 PM", "Sep 22, 2026", 1790085300, "Door locked after diagnostic", false, "" };
+  historyList[historyCount++] = { "hist-sep22-3", "Administrator", "Admin Privilege", "admin", false, "6:30 PM", "7:15 PM", "Sep 22, 2026", 1790082600, "IoT deadbolt controller firmware verification", false, "" };
+  historyList[historyCount++] = { "hist-sep22-2", "User123test", "Standard User Access", "user", true, "1:00 PM", "1:10 PM", "Sep 22, 2026", 1790062800, "Slot concluded, bolt engaged", false, "" };
+  historyList[historyCount++] = { "hist-sep22-1", "User123test", "Standard User Access", "user", false, "10:00 AM", "1:00 PM", "Sep 22, 2026", 1790052000, "Scheduled Tuesday slot: Laser power meter calibration", false, "" };
+  historyList[historyCount++] = { "hist-sep21-2", "Administrator", "Admin Privilege", "admin", true, "5:45 PM", "6:00 PM", "Sep 21, 2026", 1789993500, "Facility locked for evening", false, "" };
+  historyList[historyCount++] = { "hist-sep21-1", "Administrator", "Admin Privilege", "admin", false, "8:00 AM", "8:45 AM", "Sep 21, 2026", 1789958400, "Weekly Monday opening checks & environmental sensor audit", false, "" };
+  historyList[historyCount++] = { "hist-sep20-2", "Administrator", "Admin Privilege", "admin", true, "11:45 AM", "11:55 AM", "Sep 20, 2026", 1789885500, "Weekend re-arm smartbolt lock sequence", false, "" };
+  historyList[historyCount++] = { "hist-sep20-1", "Administrator", "Admin Privilege", "admin", false, "11:00 AM", "11:45 AM", "Sep 20, 2026", 1789882800, "Weekend automated sensor health verification", false, "" };
+  historyList[historyCount++] = { "hist-sep19-2", "User123test", "Standard User Access", "user", true, "12:00 PM", "12:10 PM", "Sep 19, 2026", 1789800000, "Secured upon leaving research lab", false, "" };
+  historyList[historyCount++] = { "hist-sep19-1", "User123test", "Standard User Access", "user", false, "9:30 AM", "12:00 PM", "Sep 19, 2026", 1789791000, "Weekend research session: Laser beam alignment", false, "" };
+  historyList[historyCount++] = { "hist-sep18-3", "Administrator", "Admin Privilege", "admin", true, "5:30 PM", "5:45 PM", "Sep 18, 2026", 1789733400, "Secured smartlock for weekend", false, "" };
+  historyList[historyCount++] = { "hist-sep18-2", "User123test", "Standard User Access", "user", false, "1:30 PM", "4:00 PM", "Sep 18, 2026", 1789719000, "Microfluidics assay setup and sensor check", false, "" };
+  historyList[historyCount++] = { "hist-sep18-1", "Administrator", "Admin Privilege", "admin", false, "8:10 AM", "8:55 AM", "Sep 18, 2026", 1789699800, "Morning shift safety and power audit", false, "" };
+  historyList[historyCount++] = { "hist-sep17-2", "User123test", "Standard User Access", "user", true, "1:00 PM", "1:10 PM", "Sep 17, 2026", 1789630800, "Door locked following schedule completion", false, "" };
+  historyList[historyCount++] = { "hist-sep17-1", "User123test", "Standard User Access", "user", false, "10:00 AM", "1:00 PM", "Sep 17, 2026", 1789620000, "Scheduled Thursday lab shift", false, "" };
+  historyList[historyCount++] = { "hist-sep16-2", "Administrator", "Admin Privilege", "admin", true, "9:30 AM", "9:40 AM", "Sep 16, 2026", 1789531800, "Drill ended; door re-secured under normal protocol", false, "" };
+  historyList[historyCount++] = { "hist-sep16-1", "Administrator", "Admin Privilege", "admin", false, "9:15 AM", "9:25 AM", "Sep 16, 2026", 1789530900, "EMERGENCY OVERRIDE UNLOCKED: Fire drill & emergency egress test", true, "Fire drill & emergency egress test" };
+}
+
+// -------------------------------------------------------------
+// History Log Storage & Sync
+// -------------------------------------------------------------
+void saveHistoryToFS() {
+  File f = LittleFS.open("/history.txt", "w");
+  if (f) {
+    for (int i = 0; i < historyCount; i++) {
+      f.println(historyList[i].id + "\t" +
+                historyList[i].username + "\t" +
+                historyList[i].permission + "\t" +
+                historyList[i].userType + "\t" +
+                (historyList[i].locked ? "1" : "0") + "\t" +
+                historyList[i].startingTime + "\t" +
+                historyList[i].endingTime + "\t" +
+                historyList[i].date + "\t" +
+                String(historyList[i].timestamp) + "\t" +
+                historyList[i].notes + "\t" +
+                (historyList[i].isEmergencyOverride ? "1" : "0") + "\t" +
+                historyList[i].emergencyReason);
+    }
+    f.close();
+  }
+}
+
+void loadHistoryFromFS() {
+  if (!LittleFS.exists("/history.txt")) {
+    initDefaultHistory();
+    saveHistoryToFS();
+    return;
+  }
+
+  File f = LittleFS.open("/history.txt", "r");
+  if (!f) {
+    initDefaultHistory();
+    return;
+  }
+
+  historyCount = 0;
+  while (f.available() && historyCount < MAX_HISTORY) {
+    String line = f.readStringUntil('\n');
+    line.trim();
+    if (line.length() == 0) continue;
+
+    int p[11];
+    int start = 0;
+    bool ok = true;
+    for (int i = 0; i < 11; i++) {
+      p[i] = line.indexOf('\t', start);
+      if (p[i] < 0) { ok = false; break; }
+      start = p[i] + 1;
+    }
+
+    if (ok) {
+      String id = line.substring(0, p[0]);
+      String u = line.substring(p[0] + 1, p[1]);
+      String perm = line.substring(p[1] + 1, p[2]);
+      String ut = line.substring(p[2] + 1, p[3]);
+      bool lk = (line.substring(p[3] + 1, p[4]) == "1");
+      String st = line.substring(p[4] + 1, p[5]);
+      String et = line.substring(p[5] + 1, p[6]);
+      String dt = line.substring(p[6] + 1, p[7]);
+      unsigned long ts = line.substring(p[7] + 1, p[8]).toInt();
+      String nt = line.substring(p[8] + 1, p[9]);
+      bool emg = (line.substring(p[9] + 1, p[10]) == "1");
+      String emgR = line.substring(p[10] + 1);
+
+      if (ut != "admin" && ut != "user") {
+        ut = u.equalsIgnoreCase("Administrator") ? "admin" : "user";
+      }
+
+      historyList[historyCount++] = { id, u, perm, ut, lk, st, et, dt, ts, nt, emg, emgR };
+    }
+  }
+  f.close();
+
+  if (historyCount == 0) {
+    initDefaultHistory();
+    saveHistoryToFS();
+  }
+}
+
+void addHistoryRecord(String username, String userType, String permission, bool locked, String notes, bool isEmergency = false, String emergencyReason = "") {
+  if (historyCount < MAX_HISTORY) {
+    historyCount++;
+  }
+  for (int i = historyCount - 1; i > 0; i--) {
+    historyList[i] = historyList[i - 1];
+  }
+
+  String id = "hist-esp-" + String(millis()) + "-" + String(random(100, 999));
+  historyList[0] = {
+    id,
+    username.length() > 0 ? username : "Administrator",
+    permission.length() > 0 ? permission : (userType == "admin" ? "Admin Privilege" : "Standard User Access"),
+    userType.length() > 0 ? userType : "user",
+    locked,
+    "Recent",
+    "Just now",
+    "Today",
+    millis(),
+    notes,
+    isEmergency,
+    emergencyReason
+  };
+  saveHistoryToFS();
+}
+
+void clearHistoryRecords() {
+  historyCount = 0;
+  LittleFS.remove("/history.txt");
 }
 
 // -------------------------------------------------------------
@@ -923,6 +1100,27 @@ String buildSyncJson() {
   }
   json += "],";
 
+  // Synced Access Log History
+  json += "\"history\":[";
+  for (int i = 0; i < historyCount; i++) {
+    if (i > 0) json += ",";
+    json += "{";
+    json += "\"id\":\"" + historyList[i].id + "\",";
+    json += "\"username\":\"" + historyList[i].username + "\",";
+    json += "\"permission\":\"" + historyList[i].permission + "\",";
+    json += "\"userType\":\"" + historyList[i].userType + "\",";
+    json += "\"locked\":" + String(historyList[i].locked ? "true" : "false") + ",";
+    json += "\"startingTime\":\"" + historyList[i].startingTime + "\",";
+    json += "\"endingTime\":\"" + historyList[i].endingTime + "\",";
+    json += "\"date\":\"" + historyList[i].date + "\",";
+    json += "\"timestamp\":" + String(historyList[i].timestamp) + ",";
+    json += "\"notes\":\"" + historyList[i].notes + "\",";
+    json += "\"isEmergencyOverride\":" + String(historyList[i].isEmergencyOverride ? "true" : "false") + ",";
+    json += "\"emergencyReason\":\"" + historyList[i].emergencyReason + "\"";
+    json += "}";
+  }
+  json += "],";
+
   json += "\"timestamp\":" + String(millis());
   json += "}";
   return json;
@@ -1017,12 +1215,18 @@ void handleRoomTransfer(String msg) {
 
     if (accept) {
       pendingStatus = "accepted";
+      String relinquishing = (pendingType == "request" ? pendingToUser : pendingFromUser);
       if (pendingType == "request") {
         activeRoomHolder = pendingFromUser;
       } else {
         activeRoomHolder = pendingToUser;
       }
       saveStateToFS();
+
+      // Record custody transfer in access log
+      String gainingRole = (activeRoomHolder.equalsIgnoreCase("Administrator") ? "admin" : "user");
+      String gainingPerm = (activeRoomHolder.equalsIgnoreCase("Administrator") ? "Admin Privilege" : "Standard User Access");
+      addHistoryRecord(activeRoomHolder, gainingRole, gainingPerm, false, "Gained room custody for Laboratory SmartLock #1 (Transferred from " + relinquishing + ")");
 
       lcd.setCursor(0, 0);
       lcd.print("ACCESS GRANTED: ");
@@ -1046,6 +1250,8 @@ void handleRoomTransfer(String msg) {
 // -------------------------------------------------------------
 void handleEmergency(String msg) {
   String user = extractJsonString(msg, "username");
+  String reason = extractJsonString(msg, "reason");
+  if (reason.length() == 0) reason = "Emergency Evacuation";
 
   lcd.setCursor(0, 0);
   lcd.print("EMERGENCY ALERT!");
@@ -1054,6 +1260,9 @@ void handleEmergency(String msg) {
 
   activeRoomHolder = (user.length() > 0 ? user : "EMERGENCY");
   
+  // Record emergency override event in access log
+  addHistoryRecord(activeRoomHolder, "user", "EMERGENCY OVERRIDE", false, "EMERGENCY OVERRIDE UNLOCKED: " + reason, true, reason);
+
   if (isLocked) {
     // If currently locked, unlock immediately
     triggerLockToggle(activeRoomHolder);
@@ -1153,36 +1362,44 @@ void onEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventTyp
 
           if (entity == "profileRequests") {
             if (action == "create") {
-              String u = extractJsonString(msg, "username");
-              String p = extractJsonString(msg, "password");
+              String u = extractPayloadString(msg, "username");
+              String p = extractPayloadString(msg, "password");
+              String t = extractPayloadString(msg, "userType");
+              if (t.length() == 0) t = extractPayloadString(msg, "type");
+              if (t != "admin" && t != "user") t = "user";
               if (u.length() > 0 && p.length() > 0) {
-                addRequest(u, p, "user");
+                addRequest(u, p, t);
               }
             } else if (action == "approve") {
-              String u = extractJsonString(msg, "username");
-              String p = extractJsonString(msg, "password");
-              String t = extractJsonString(msg, "type");
+              String u = extractPayloadString(msg, "username");
+              String p = extractPayloadString(msg, "password");
+              String t = extractPayloadString(msg, "userType");
+              if (t.length() == 0) t = extractPayloadString(msg, "type");
+              if (t != "admin" && t != "user") t = (u.equalsIgnoreCase("Administrator") ? "admin" : "user");
               if (u.length() > 0) {
                 approveRequest(u, p, t);
               }
             } else if (action == "reject") {
-              String u = extractJsonString(msg, "username");
+              String u = extractPayloadString(msg, "username");
               if (u.length() > 0) {
                 rejectRequest(u);
               }
             }
           } else if (entity == "profiles") {
             if (action == "create") {
-              String u = extractJsonString(msg, "username");
-              String p = extractJsonString(msg, "password");
-              String t = extractJsonString(msg, "type");
-              String perm = extractJsonString(msg, "permission");
+              String u = extractPayloadString(msg, "username");
+              String p = extractPayloadString(msg, "password");
+              String t = extractPayloadString(msg, "userType");
+              if (t.length() == 0) t = extractPayloadString(msg, "type");
+              if (t != "admin" && t != "user") t = (u.equalsIgnoreCase("Administrator") ? "admin" : "user");
+              String perm = extractPayloadString(msg, "permission");
+              if (perm.length() == 0) perm = (t == "admin" ? "Admin Privilege" : "Standard User Access");
               int avIdx = extractAvatarIndex(msg);
               if (u.length() > 0) {
-                addUser(u, p.length() > 0 ? p : "user", t.length() > 0 ? t : "user", perm.length() > 0 ? perm : "Standard User Access", avIdx);
+                addUser(u, p.length() > 0 ? p : "user", t, perm, avIdx);
               }
             } else if (action == "update_avatar") {
-              String u = extractJsonString(msg, "username");
+              String u = extractPayloadString(msg, "username");
               int avIdx = extractAvatarIndex(msg);
               if (u.length() > 0) {
                 for (int i = 0; i < userCount; i++) {
@@ -1196,14 +1413,23 @@ void onEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventTyp
                 ws.textAll(buildSyncJson());
               }
             } else if (action == "update") {
-              String u = extractJsonString(msg, "username");
-              String p = extractJsonString(msg, "password");
+              String u = extractPayloadString(msg, "username");
+              String p = extractPayloadString(msg, "password");
+              String t = extractPayloadString(msg, "userType");
+              if (t.length() == 0) t = extractPayloadString(msg, "type");
+              String perm = extractPayloadString(msg, "permission");
               int avIdx = extractAvatarIndex(msg);
               bool hasAv = (msg.indexOf("\"avatarIndex\"") >= 0 || msg.indexOf("\"avatarUrl\"") >= 0);
               if (u.length() > 0) {
                 for (int i = 0; i < userCount; i++) {
                   if (userList[i].username.equalsIgnoreCase(u)) {
                     if (p.length() > 0) userList[i].password = p;
+                    if (t == "admin" || t == "user") {
+                      userList[i].type = t;
+                    }
+                    if (perm.length() > 0) {
+                      userList[i].permission = perm;
+                    }
                     if (hasAv) {
                       userList[i].avatarIndex = avIdx;
                       userList[i].avatarUrl = String(avIdx);
@@ -1215,29 +1441,32 @@ void onEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventTyp
                 ws.textAll(buildSyncJson());
               }
             } else if (action == "delete") {
-              String u = extractJsonString(msg, "username");
+              String u = extractPayloadString(msg, "username");
               if (u.length() > 0) {
                 removeUser(u);
               }
             }
           } else if (entity == "schedules") {
             if (action == "create" || action == "update") {
-              String sId = extractJsonString(msg, "id");
-              String sLbl = extractJsonString(msg, "label");
-              String sRole = extractJsonString(msg, "role");
-              String sTime = extractJsonString(msg, "time");
+              String sId = extractPayloadString(msg, "id");
+              String sLbl = extractPayloadString(msg, "label");
+              String sRole = extractPayloadString(msg, "userType");
+              if (sRole.length() == 0) sRole = extractPayloadString(msg, "role");
+              if (sRole != "admin" && sRole != "user") {
+                sRole = (sLbl.equalsIgnoreCase("Administrator") ? "admin" : "user");
+              }
+              String sTime = extractPayloadString(msg, "time");
               String sDays = extractDaysString(msg);
-              String sStart = extractJsonString(msg, "startTime");
-              String sEnd = extractJsonString(msg, "endTime");
-              String sStat = extractJsonString(msg, "status");
+              String sStart = extractPayloadString(msg, "startTime");
+              String sEnd = extractPayloadString(msg, "endTime");
+              String sStat = extractPayloadString(msg, "status");
               String sDayConfigs = extractDayConfigsJson(msg);
               if (sId.length() == 0) sId = String(millis());
-              if (sRole.length() == 0) sRole = "user";
               if (sStat.length() == 0) sStat = "active";
               addOrUpdateSchedule(sId, sLbl, sRole, sTime, sDays, sStart, sEnd, sStat, sDayConfigs);
             } else if (action == "delete") {
-              String sId = extractJsonString(msg, "id");
-              String sLbl = extractJsonString(msg, "label");
+              String sId = extractPayloadString(msg, "id");
+              String sLbl = extractPayloadString(msg, "label");
               if (sId.length() > 0) {
                 removeSchedule(sId);
               }
@@ -1247,20 +1476,43 @@ void onEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventTyp
             }
           } else if (entity == "labNotes") {
             if (action == "create" || action == "update") {
-              String nId = extractJsonString(msg, "id");
-              String nUser = extractJsonString(msg, "username");
-              String nTitle = extractJsonString(msg, "title");
-              String nDate = extractJsonString(msg, "date");
-              String nTime = extractJsonString(msg, "time");
-              String nPurpose = extractJsonString(msg, "purpose");
-              String nStatus = extractJsonString(msg, "status");
+              String nId = extractPayloadString(msg, "id");
+              String nUser = extractPayloadString(msg, "username");
+              String nTitle = extractPayloadString(msg, "title");
+              String nDate = extractPayloadString(msg, "date");
+              String nTime = extractPayloadString(msg, "time");
+              String nPurpose = extractPayloadString(msg, "purpose");
+              String nStatus = extractPayloadString(msg, "status");
               if (nId.length() == 0) nId = "note-" + String(millis());
               if (nStatus.length() == 0) nStatus = "confirmed";
               addOrUpdateLabNote(nId, nUser, nTitle, nDate, nTime, nPurpose, nStatus);
             } else if (action == "delete") {
-              String nId = extractJsonString(msg, "id");
+              String nId = extractPayloadString(msg, "id");
               if (nId.length() > 0) {
                 removeLabNote(nId);
+              }
+            }
+          } else if (entity == "history") {
+            if (action == "clear") {
+              clearHistoryRecords();
+            } else if (action == "seed") {
+              initDefaultHistory();
+              saveHistoryToFS();
+            } else if (action == "add" || action == "create") {
+              String hUser = extractPayloadString(msg, "username");
+              String hRole = extractPayloadString(msg, "userType");
+              if (hRole.length() == 0) hRole = extractPayloadString(msg, "role");
+              if (hRole != "admin" && hRole != "user") hRole = (hUser.equalsIgnoreCase("Administrator") ? "admin" : "user");
+              String hPerm = extractPayloadString(msg, "permission");
+              if (hPerm.length() == 0) hPerm = (hRole == "admin" ? "Admin Privilege" : "Standard User Access");
+              String hNotes = extractPayloadString(msg, "notes");
+              String hLockedStr = extractPayloadString(msg, "locked");
+              bool hLocked = (hLockedStr == "true" || hLockedStr == "1");
+              String hEmgStr = extractPayloadString(msg, "isEmergencyOverride");
+              bool hEmg = (hEmgStr == "true" || hEmgStr == "1");
+              String hEmgR = extractPayloadString(msg, "emergencyReason");
+              if (hUser.length() > 0) {
+                addHistoryRecord(hUser, hRole, hPerm, hLocked, hNotes, hEmg, hEmgR);
               }
             }
           }
@@ -1306,6 +1558,7 @@ void setup() {
     loadRequestsFromFS();
     loadSchedulesFromFS();
     loadLabNotesFromFS();
+    loadHistoryFromFS();
   } else {
     Serial.println("LittleFS mount error");
     initDefaultUsers();
@@ -1390,6 +1643,11 @@ void loop() {
           }
           saveStateToFS();
 
+          // Record unlock event in access log
+          String actingRole = (activeRoomHolder.equalsIgnoreCase("Administrator") ? "admin" : "user");
+          String actingPerm = (activeRoomHolder.equalsIgnoreCase("Administrator") ? "Admin Privilege" : "Standard User Access");
+          addHistoryRecord(activeRoomHolder, actingRole, actingPerm, false, "Door opened with authorized credential via ESP8266 controller");
+
           lcd.setCursor(0, 0);
           lcd.print("LOCK STATUS:    ");
           lcd.setCursor(0, 1);
@@ -1423,6 +1681,11 @@ void loop() {
           digitalWrite(LIMIT_OUTPUT, LOW);
 
           // Invalidate room holder and pending transfers upon locking
+          String lockedByUser = (lastActingUser.length() > 0 ? lastActingUser : "Administrator");
+          String lockingRole = (lockedByUser.equalsIgnoreCase("Administrator") ? "admin" : "user");
+          String lockingPerm = (lockedByUser.equalsIgnoreCase("Administrator") ? "Admin Privilege" : "Standard User Access");
+          addHistoryRecord(lockedByUser, lockingRole, lockingPerm, true, "Door locked securely via ESP8266 controller");
+
           activeRoomHolder = "";
           pendingTransferId = "";
           saveStateToFS();
