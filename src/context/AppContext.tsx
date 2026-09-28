@@ -246,15 +246,15 @@ export function isUserScheduleActiveNow(
   schedules: UserSchedule[]
 ): boolean {
   if (!user) return false;
-  if (user.type === 'admin') return true; // Admins have 24/7 master clearance
+  if (user.type === 'admin' || user.username.toLowerCase() === 'administrator') return true; // Admins have 24/7 master clearance
 
   const userSchedules = schedules.filter(
     (s) => s.label.toLowerCase() === user.username.toLowerCase()
   );
 
-  // Non-admin users MUST have an explicit access schedule configured
+  // If user doesn't have a schedule yet, default to active standard access
   if (userSchedules.length === 0) {
-    return false;
+    return true;
   }
 
   return userSchedules.some((schedule) => isScheduleCurrentlyActive(schedule, user.type));
@@ -302,6 +302,84 @@ const defaultSchedules: UserSchedule[] = [
 ];
 
 const defaultHistory: HistoryRecord[] = generateMonthHistory();
+
+export function normalizeHistoryRecord(item: HistoryRecord): HistoryRecord {
+  if (!item) return item;
+  const now = new Date();
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const todayStr = `${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
+  const hours = now.getHours();
+  const minutes = now.getMinutes();
+  const nowTimeStr = `${hours % 12 || 12}:${String(minutes).padStart(2, '0')} ${hours >= 12 ? 'PM' : 'AM'}`;
+
+  // 1. Calculate proper millisecond timestamp (year 2024+)
+  let ts: number | undefined = item.timestamp;
+  if (typeof ts === 'number' && !isNaN(ts)) {
+    if (ts >= 1000000000000) {
+      // valid ms
+    } else if (ts >= 1000000000) {
+      ts = ts * 1000;
+    } else {
+      // small ESP uptime
+      ts = undefined;
+    }
+  } else {
+    ts = undefined;
+  }
+
+  // 2. Fix date if placeholder
+  let date = (item.date || '').trim();
+  if (!date || date.toLowerCase() === 'today' || date.toLowerCase() === 'yesterday' || date.toLowerCase().includes('undefined')) {
+    date = todayStr;
+  }
+
+  // 3. Fix startingTime & endingTime if placeholder
+  let startingTime = (item.startingTime || '').trim();
+  if (!startingTime || startingTime.toLowerCase().includes('recent') || startingTime.toLowerCase().includes('just now') || startingTime.toLowerCase().includes('undefined')) {
+    startingTime = nowTimeStr;
+  }
+  let endingTime = (item.endingTime || '').trim();
+  if (!endingTime || endingTime.toLowerCase().includes('recent') || endingTime.toLowerCase().includes('just now') || endingTime.toLowerCase().includes('undefined')) {
+    endingTime = nowTimeStr;
+  }
+
+  if (!ts) {
+    const parsed = Date.parse(`${date} ${startingTime}`);
+    ts = !isNaN(parsed) && parsed > 1000000000000 ? parsed : Date.now();
+  }
+
+  return {
+    ...item,
+    date,
+    startingTime,
+    endingTime,
+    timestamp: ts,
+  };
+}
+
+export function deduplicateHistory(records: HistoryRecord[]): HistoryRecord[] {
+  const seenIds = new Set<string>();
+  const seenSignatures = new Set<string>();
+  const result: HistoryRecord[] = [];
+
+  for (const rawItem of records) {
+    if (!rawItem || !rawItem.id) continue;
+    const item = normalizeHistoryRecord(rawItem);
+    if (seenIds.has(item.id)) continue;
+
+    const roughTime = Math.round((item.timestamp || 0) / 15000);
+    const sig = `${(item.username || '').toLowerCase()}_${item.date}_${item.startingTime}_${(item.notes || '').slice(0, 30)}_${item.locked}_${roughTime}`;
+
+    if (seenSignatures.has(sig)) continue;
+
+    seenIds.add(item.id);
+    seenSignatures.add(sig);
+    result.push(item);
+  }
+
+  result.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+  return result;
+}
 
 function formatTimeAndDate(d = new Date()) {
   const hours = d.getHours();
@@ -408,16 +486,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Data sets (synced via WebSocket)
   const [history, setHistory] = useState<HistoryRecord[]>(() => {
     try {
+      const isCleared = localStorage.getItem('smartlock_history_cleared') === 'true';
+      if (isCleared) return [];
       const saved = localStorage.getItem('history_record');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          const combined = [...parsed];
+          defaultHistory.forEach((item) => {
+            if (item && item.id && !combined.some((c) => c.id === item.id)) {
+              combined.push(item);
+            }
+          });
+          return deduplicateHistory(combined);
         }
       }
-      return defaultHistory;
+      return deduplicateHistory(defaultHistory);
     } catch {
-      return defaultHistory;
+      return deduplicateHistory(defaultHistory);
     }
   });
 
@@ -830,31 +916,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setRoomTransfers(parsed.roomTransfers);
       }
       if (Array.isArray(parsed.history)) {
-        if (parsed.history.length === 0) {
-          // If empty history received on initial sync, initialize with 1 month sample data and push to hardware
-          const monthMock = generateMonthHistory();
-          setHistory(monthMock);
-          sendWsJson({
-            type: 'DATA_UPDATE_ACTION',
-            entity: 'history',
-            action: 'seed',
-            payload: monthMock,
-            timestamp: Date.now(),
-          });
-        } else {
-          setHistory((prev) => {
-            const merged = [...parsed.history];
-            prev.forEach((localItem) => {
-              if (!merged.some((m) => m.id === localItem.id)) {
-                if (Date.now() - (localItem.timestamp || 0) < 60000) {
-                  merged.push(localItem);
-                }
+        setHistory((prev) => {
+          const isCleared = localStorage.getItem('smartlock_history_cleared') === 'true';
+          const combined = [...(prev || [])];
+
+          // Always ensure the 1-month mock history is present unless user explicitly purged
+          if (!isCleared) {
+            defaultHistory.forEach((item) => {
+              if (item && item.id && !combined.some((c) => c.id === item.id)) {
+                combined.push(item);
               }
             });
-            merged.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-            return merged;
+          }
+
+          // Merge any incoming history items without overwriting older baseline records
+          parsed.history.forEach((incItem: HistoryRecord) => {
+            if (incItem && incItem.id) {
+              combined.push(incItem);
+            }
           });
-        }
+
+          const merged = deduplicateHistory(combined);
+          try {
+            localStorage.setItem('history_record', JSON.stringify(merged));
+          } catch {}
+          return merged;
+        });
       }
       if (Array.isArray(parsed.labNotes)) {
         setLabNotes(parsed.labNotes);
@@ -996,6 +1083,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             } catch {}
             return updated;
           });
+        } else if (action === 'add_multiple' || Array.isArray(payload)) {
+          const incoming = Array.isArray(payload) ? payload : [payload];
+          setHistory((prev) => {
+            const updated = deduplicateHistory([...incoming, ...prev]);
+            try {
+              localStorage.setItem('history_record', JSON.stringify(updated));
+            } catch {}
+            return updated;
+          });
         } else if (action === 'clear') {
           setHistory([]);
           try {
@@ -1023,6 +1119,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } else if (parsed.type === 'ROOM_TRANSFER_UPDATE') {
       if (Array.isArray(parsed.roomTransfers)) setRoomTransfers(parsed.roomTransfers);
       if (parsed.activeRoomHolder !== undefined) setActiveRoomHolder(parsed.activeRoomHolder);
+      if (Array.isArray(parsed.history)) {
+        setHistory((prev) => deduplicateHistory([...parsed.history, ...prev]));
+      }
     }
   }, [addWsLog]);
 
@@ -1093,6 +1192,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [connectWebSocket, isSimulatorActive]);
 
+  // Initial HTTP state sync fallback on mount
+  useEffect(() => {
+    fetch('/api/state')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && typeof data === 'object') {
+          handleIncomingWsMessage(JSON.stringify(data));
+        }
+      })
+      .catch(() => {});
+  }, [handleIncomingWsMessage]);
+
   // PERIODIC SYNC POLLING: Send WebSocket POLL_REQUEST every 5 seconds to sync schedules and presence
   useEffect(() => {
     const pollInterval = setInterval(() => {
@@ -1109,11 +1220,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         } catch (e: any) {
           addWsLog('system', `Failed to send periodic poll: ${e.message}`);
         }
+      } else {
+        // HTTP fallback poll for multi-device reliability
+        fetch('/api/state')
+          .then((res) => res.json())
+          .then((data) => {
+            if (data && typeof data === 'object') {
+              handleIncomingWsMessage(JSON.stringify(data));
+            }
+          })
+          .catch(() => {});
       }
     }, 5000); // 5 seconds interval
 
     return () => clearInterval(pollInterval);
-  }, [addWsLog]);
+  }, [addWsLog, handleIncomingWsMessage]);
 
   // Broadcast user online presence on login / mount
   useEffect(() => {
@@ -1140,7 +1261,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setLocked(target);
           if (target) setActiveRoomHolder(null);
         } else if (actionData.type === 'ROOM_TRANSFER_ACTION' && actionData.subType === 'respond' && actionData.accept) {
-          if (actionData.toUsername) setActiveRoomHolder(actionData.toUsername);
+          if (actionData.gaining || actionData.toUsername) setActiveRoomHolder(actionData.gaining || actionData.toUsername);
+          if (actionData.gainRecord && actionData.relinqRecord) {
+            setHistory((prev) => deduplicateHistory([actionData.gainRecord, actionData.relinqRecord, ...prev]));
+          }
         } else if (actionData.type === 'DATA_UPDATE_ACTION') {
           if (actionData.entity === 'history') {
             if ((actionData.action === 'add' || actionData.action === 'create') && actionData.payload) {
@@ -1148,6 +1272,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 if (prev.some((h) => h.id === actionData.payload.id)) return prev;
                 return [actionData.payload, ...prev];
               });
+            } else if (actionData.action === 'add_multiple' || Array.isArray(actionData.payload)) {
+              const incoming = Array.isArray(actionData.payload) ? actionData.payload : [actionData.payload];
+              setHistory((prev) => deduplicateHistory([...incoming, ...prev]));
             } else if (actionData.action === 'seed' && Array.isArray(actionData.payload)) {
               setHistory(actionData.payload);
             } else if (actionData.action === 'clear') {
@@ -1227,6 +1354,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setLockProgress(0);
     setRemainingLockTime(3);
 
+    const newRecord: HistoryRecord = {
+      id: `hist-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      username: actingUser,
+      permission: actingRole === 'admin' ? 'Admin Privilege' : (currentUserRef.current?.permission || 'Standard User Access'),
+      userType: actingRole,
+      locked: willBeLocked,
+      startingTime: timeStr,
+      endingTime: timeStr,
+      date: dateStr,
+      timestamp: Date.now(),
+      notes: willBeLocked ? 'Door locked securely via WebSocket' : 'Door opened with authorized credential via WebSocket',
+    };
+
+    // Immediately record locally and broadcast to server and other clients
+    setHistory((prev) => deduplicateHistory([newRecord, ...prev]));
+    try {
+      localStorage.removeItem('smartlock_history_cleared');
+    } catch {}
+
+    sendWsJson({
+      type: 'DATA_UPDATE_ACTION',
+      entity: 'history',
+      action: 'add',
+      payload: newRecord,
+      timestamp: Date.now(),
+    });
+
+    // Notify REST backend
+    try {
+      fetch('/api/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newRecord),
+      }).catch(() => {});
+    } catch {}
+
     // Send action JSON to ESP8266 WebSocket server
     const lockActionMsg: ClientMessage = {
       type: 'LOCK_ACTION',
@@ -1253,28 +1416,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setLockProgress(100);
           setRemainingLockTime(null);
           setLocked(willBeLocked);
-
-          const previousTime = history.length > 0 ? history[0].endingTime : '8:00 AM';
-          const newRecord: HistoryRecord = {
-            id: `hist-${Date.now()}`,
-            username: actingUser,
-            permission: actingRole === 'admin' ? 'Admin Privilege' : 'Standard User Access',
-            userType: actingRole,
-            locked: willBeLocked,
-            startingTime: previousTime,
-            endingTime: timeStr,
-            date: dateStr,
-            timestamp: Date.now(),
-            notes: willBeLocked ? 'Door locked securely via WebSocket' : 'Door opened with authorized credential via WebSocket',
-          };
-          setHistory((prev) => [newRecord, ...prev]);
-          sendWsJson({
-            type: 'DATA_UPDATE_ACTION',
-            entity: 'history',
-            action: 'add',
-            payload: newRecord,
-            timestamp: Date.now(),
-          });
 
           if (!willBeLocked) {
             setActiveRoomHolder(actingUser);
@@ -1303,6 +1444,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Emergency trigger
   const triggerEmergency = (reason: string, notes?: string) => {
     const actingUser = currentUser?.username || 'Unknown User';
+    const actingRole = currentUser?.type || 'user';
     const { timeStr, dateStr } = formatTimeAndDate();
 
     setIsEmergencyOverrideInProgress(true);
@@ -1314,7 +1456,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newAlert: EmergencyAlert = {
       id: `alert-${Date.now()}`,
       username: actingUser,
-      userRole: currentUser?.type || 'user',
+      userRole: actingRole,
       timestamp: `${timeStr}, ${dateStr}`,
       timestampMs: Date.now(),
       reason,
@@ -1322,6 +1464,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       resolved: false,
     };
     setEmergencyAlerts((prev) => [newAlert, ...prev]);
+
+    const newRecord: HistoryRecord = {
+      id: `hist-emg-${Date.now()}`,
+      username: actingUser,
+      permission: 'EMERGENCY OVERRIDE',
+      userType: actingRole,
+      locked: false,
+      startingTime: timeStr,
+      endingTime: timeStr,
+      date: dateStr,
+      timestamp: Date.now(),
+      isEmergencyOverride: true,
+      emergencyReason: reason,
+      notes: `EMERGENCY OVERRIDE UNLOCKED: ${reason}${notes ? ` - ${notes}` : ''}`,
+    };
+    setHistory((prev) => deduplicateHistory([newRecord, ...prev]));
+    try {
+      localStorage.removeItem('smartlock_history_cleared');
+    } catch {}
+
+    sendWsJson({
+      type: 'DATA_UPDATE_ACTION',
+      entity: 'history',
+      action: 'add',
+      payload: newRecord,
+      timestamp: Date.now(),
+    });
+
+    try {
+      fetch('/api/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newRecord),
+      }).catch(() => {});
+    } catch {}
 
     // Send action JSON to ESP8266
     const emgActionMsg: ClientMessage = {
@@ -1342,29 +1519,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setRemainingLockTime(null);
         setLocked(false);
         setActiveRoomHolder(actingUser);
-
-        const newRecord: HistoryRecord = {
-          id: `hist-emg-${Date.now()}`,
-          username: actingUser,
-          permission: 'EMERGENCY OVERRIDE',
-          userType: currentUser?.type || 'user',
-          locked: false,
-          startingTime: timeStr,
-          endingTime: timeStr,
-          date: dateStr,
-          timestamp: Date.now(),
-          isEmergencyOverride: true,
-          emergencyReason: reason,
-          notes: `EMERGENCY OVERRIDE UNLOCKED: ${reason}${notes ? ` - ${notes}` : ''}`,
-        };
-        setHistory((prev) => [newRecord, ...prev]);
-        sendWsJson({
-          type: 'DATA_UPDATE_ACTION',
-          entity: 'history',
-          action: 'add',
-          payload: newRecord,
-          timestamp: Date.now(),
-        });
       }, 2000);
     }
   };
@@ -1478,23 +1632,56 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!transfer) return;
 
     const { timeStr, dateStr } = formatTimeAndDate();
+    const isAccessReq = transfer.requestType === 'request';
+    const relinquishing = isAccessReq ? transfer.toUsername : transfer.fromUsername;
+    const gaining = isAccessReq ? transfer.fromUsername : transfer.toUsername;
 
-    // Send action JSON to ESP8266
+    const relinqUser = profiles.find((p) => p.username.toLowerCase() === relinquishing.toLowerCase());
+    const gainUser = profiles.find((p) => p.username.toLowerCase() === gaining.toLowerCase());
+
+    const relinqRecord: HistoryRecord = {
+      id: `hist-relinq-${transferId}`,
+      username: relinquishing,
+      permission: relinqUser?.permission || (relinquishing.toLowerCase() === 'administrator' ? 'Admin Privilege' : 'Standard User Access'),
+      userType: (relinquishing.toLowerCase() === 'administrator' || relinqUser?.type === 'admin') ? 'admin' : 'user',
+      locked: false,
+      startingTime: timeStr,
+      endingTime: timeStr,
+      date: dateStr,
+      timestamp: Date.now() - 1,
+      notes: `Relinquished room custody for Laboratory SmartLock #1 (Transferred to ${gaining})`,
+    };
+
+    const gainRecord: HistoryRecord = {
+      id: `hist-gain-${transferId}`,
+      username: gaining,
+      permission: gainUser?.permission || (gaining.toLowerCase() === 'administrator' ? 'Admin Privilege' : 'Standard User Access'),
+      userType: (gaining.toLowerCase() === 'administrator' || gainUser?.type === 'admin') ? 'admin' : 'user',
+      locked: false,
+      startingTime: timeStr,
+      endingTime: timeStr,
+      date: dateStr,
+      timestamp: Date.now(),
+      notes: `Gained room custody for Laboratory SmartLock #1 (Transferred from ${relinquishing})`,
+    };
+
+    // Send action JSON to ESP8266 & Server with complete transfer and history metadata
     sendWsJson({
       type: 'ROOM_TRANSFER_ACTION',
       subType: 'respond',
       transferId,
       accept,
+      requestType: transfer.requestType,
       fromUsername: transfer.fromUsername,
       toUsername: transfer.toUsername,
+      relinquishing,
+      gaining,
+      gainRecord,
+      relinqRecord,
       timestamp: Date.now(),
     });
 
     if (accept) {
-      const isAccessReq = transfer.requestType === 'request';
-      const relinquishing = isAccessReq ? transfer.toUsername : transfer.fromUsername;
-      const gaining = isAccessReq ? transfer.fromUsername : transfer.toUsername;
-
       setRoomTransfers((prev) =>
         prev
           .map((t) => (t.id === transferId ? { ...t, status: 'accepted' as const, resolvedAt: `${timeStr}, ${dateStr}` } : t))
@@ -1503,34 +1690,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       setActiveRoomHolder(gaining);
 
-      const gainRecord: HistoryRecord = {
-        id: `hist-gain-${Date.now()}`,
-        username: gaining,
-        permission: gaining.toLowerCase() === 'administrator' ? 'Admin Privilege' : 'Standard User Access',
-        userType: gaining.toLowerCase() === 'administrator' ? 'admin' : 'user',
-        locked: false,
-        startingTime: timeStr,
-        endingTime: timeStr,
-        date: dateStr,
-        timestamp: Date.now(),
-        notes: `Gained room custody for Laboratory SmartLock #1 (Transferred from ${relinquishing})`,
-      };
+      setHistory((prev) => deduplicateHistory([gainRecord, relinqRecord, ...prev]));
+      try {
+        localStorage.removeItem('smartlock_history_cleared');
+      } catch {}
 
-      setHistory((prev) => [gainRecord, ...prev]);
+      // Broadcast history updates via WebSocket data action
       sendWsJson({
         type: 'DATA_UPDATE_ACTION',
         entity: 'history',
-        action: 'add',
-        payload: gainRecord,
+        action: 'add_multiple',
+        payload: [gainRecord, relinqRecord],
         timestamp: Date.now(),
       });
+
+      // Notify REST backend for guaranteed cross-device replication
+      try {
+        fetch('/api/room-transfers/respond', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            transferId,
+            accept: true,
+            requestType: transfer.requestType,
+            fromUsername: transfer.fromUsername,
+            toUsername: transfer.toUsername,
+            relinquishing,
+            gaining,
+            gainRecord,
+            relinqRecord,
+          }),
+        }).catch(() => {});
+      } catch {}
 
       const notif: AdminLockNotification = {
         id: `notif-transfer-${Date.now()}`,
         type: 'lock_state_change',
         action: 'unlocked',
         username: gaining,
-        userRole: 'user',
+        userRole: (gaining.toLowerCase() === 'administrator' || gainUser?.type === 'admin') ? 'admin' : 'user',
         doorName: 'Laboratory SmartLock #1',
         timestamp: `${timeStr}, ${dateStr}`,
         timestampMs: Date.now(),
@@ -1541,6 +1739,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setRoomTransfers((prev) =>
         prev.map((t) => (t.id === transferId ? { ...t, status: 'declined' as const, resolvedAt: `${timeStr}, ${dateStr}` } : t))
       );
+
+      try {
+        fetch('/api/room-transfers/respond', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            transferId,
+            accept: false,
+          }),
+        }).catch(() => {});
+      } catch {}
     }
   };
 
@@ -1694,6 +1903,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       payload: { username, password: req.password, type: req.type, time: req.time },
       timestamp: Date.now(),
     });
+
+    // Auto-create standard access schedule for approved user
+    const defaultUserSched: UserSchedule = {
+      id: `sched-${Date.now()}`,
+      label: req.username,
+      role: req.type,
+      time: '24/7 Unlimited Access, Monday to Sunday',
+      days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+      startTime: '12:00 AM',
+      endTime: '11:59 PM',
+      dayConfigs: {
+        Mon: { enabled: true, is24Hours: true, startTime: '12:00 AM', endTime: '11:59 PM' },
+        Tue: { enabled: true, is24Hours: true, startTime: '12:00 AM', endTime: '11:59 PM' },
+        Wed: { enabled: true, is24Hours: true, startTime: '12:00 AM', endTime: '11:59 PM' },
+        Thu: { enabled: true, is24Hours: true, startTime: '12:00 AM', endTime: '11:59 PM' },
+        Fri: { enabled: true, is24Hours: true, startTime: '12:00 AM', endTime: '11:59 PM' },
+        Sat: { enabled: true, is24Hours: true, startTime: '12:00 AM', endTime: '11:59 PM' },
+        Sun: { enabled: true, is24Hours: true, startTime: '12:00 AM', endTime: '11:59 PM' },
+      },
+      status: 'active',
+    };
+    addSchedule(defaultUserSched);
   };
 
   const rejectRequest = (username: string) => {
@@ -1840,6 +2071,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       payload: newProfile,
       timestamp: Date.now(),
     });
+
+    // Auto-create standard access schedule for the new user
+    const defaultUserSched: UserSchedule = {
+      id: `sched-${Date.now()}`,
+      label: cleanUsername,
+      role: cleanType,
+      time: '24/7 Unlimited Access, Monday to Sunday',
+      days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+      startTime: '12:00 AM',
+      endTime: '11:59 PM',
+      dayConfigs: {
+        Mon: { enabled: true, is24Hours: true, startTime: '12:00 AM', endTime: '11:59 PM' },
+        Tue: { enabled: true, is24Hours: true, startTime: '12:00 AM', endTime: '11:59 PM' },
+        Wed: { enabled: true, is24Hours: true, startTime: '12:00 AM', endTime: '11:59 PM' },
+        Thu: { enabled: true, is24Hours: true, startTime: '12:00 AM', endTime: '11:59 PM' },
+        Fri: { enabled: true, is24Hours: true, startTime: '12:00 AM', endTime: '11:59 PM' },
+        Sat: { enabled: true, is24Hours: true, startTime: '12:00 AM', endTime: '11:59 PM' },
+        Sun: { enabled: true, is24Hours: true, startTime: '12:00 AM', endTime: '11:59 PM' },
+      },
+      status: 'active',
+    };
+    addSchedule(defaultUserSched);
 
     return { success: true };
   };
@@ -2097,6 +2350,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteHistory = () => {
     setHistory([]);
+    try {
+      localStorage.setItem('history_record', JSON.stringify([]));
+      localStorage.setItem('smartlock_history_cleared', 'true');
+    } catch {}
     sendWsJson({
       type: 'DATA_UPDATE_ACTION',
       entity: 'history',

@@ -16,7 +16,7 @@ import {
   CartesianGrid,
   Legend,
 } from 'recharts';
-import { TrendingUp, Calendar, Clock, Shield, Users } from 'lucide-react';
+import { TrendingUp } from 'lucide-react';
 
 interface AnalyticsChartsProps {
   records?: HistoryRecord[];
@@ -29,6 +29,8 @@ export interface TrendDataPoint {
   label: string;
   unlocks: number;
   locks: number;
+  transfers: number;
+  overrides: number;
 }
 
 export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ records: propRecords }) => {
@@ -45,8 +47,22 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ records: propR
     if (allRecords.length > 0) {
       return Math.max(...allRecords.map((r) => r.timestamp));
     }
-    return new Date('2026-09-14T20:00:00').getTime();
+    return new Date('2026-09-26T20:00:00').getTime();
   }, [allRecords]);
+
+  // Helper to check if a record is a transfer
+  const isTransferRecord = (item: HistoryRecord) => {
+    const notesLower = (item.notes || '').toLowerCase();
+    return (
+      notesLower.includes('relinquish') ||
+      notesLower.includes('transferred to') ||
+      notesLower.includes('gained room') ||
+      notesLower.includes('gained custody') ||
+      notesLower.includes('transferred from') ||
+      notesLower.includes('room custody') ||
+      notesLower.includes('room transfer')
+    );
+  };
 
   // Filter records by the selected Time Range
   const rangeFilteredRecords = useMemo(() => {
@@ -57,7 +73,6 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ records: propR
 
     switch (timeRange) {
       case 'daily': {
-        // Events within 24 hours of latest activity (or matching same calendar day)
         const latestDateStr = new Date(now).toDateString();
         const dailyItems = allRecords.filter(
           (r) =>
@@ -69,15 +84,12 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ records: propR
           : allRecords.filter((r) => r.timestamp >= now - 28 * 60 * 60 * 1000);
       }
       case 'weekly': {
-        // Past 7 days
         return allRecords.filter((r) => r.timestamp >= now - 7 * oneDayMs);
       }
       case 'monthly': {
-        // Past 31 days (month's worth of data)
         return allRecords.filter((r) => r.timestamp >= now - 32 * oneDayMs);
       }
       case 'yearly': {
-        // Past 365 days
         return allRecords.filter((r) => r.timestamp >= now - 365 * oneDayMs);
       }
       default:
@@ -85,64 +97,58 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ records: propR
     }
   }, [allRecords, timeRange, latestTimestamp]);
 
-  // Time Range Badge info
-  const rangeInfo = useMemo(() => {
-    const count = rangeFilteredRecords.length;
-    switch (timeRange) {
-      case 'daily':
-        return `Today (Sep 14, 2026) · ${count} events`;
-      case 'weekly':
-        return `Past 7 Days (Sep 8 – 14) · ${count} events`;
-      case 'monthly':
-        return `Past 30 Days (Aug 15 – Sep 14) · ${count} events`;
-      case 'yearly':
-        return `Year 2026 to Date · ${count} events`;
-    }
-  }, [timeRange, rangeFilteredRecords.length]);
-
   // 1. Data for Trends ("Daily" / Timeline BarChart)
   const trendsData: TrendDataPoint[] = useMemo(() => {
     if (timeRange === 'daily') {
-      // 3-hour blocks for today
       const slots = [
-        { label: '6-9 AM', minH: 6, maxH: 9, unlocks: 0, locks: 0 },
-        { label: '9-12 PM', minH: 9, maxH: 12, unlocks: 0, locks: 0 },
-        { label: '12-3 PM', minH: 12, maxH: 15, unlocks: 0, locks: 0 },
-        { label: '3-6 PM', minH: 15, maxH: 18, unlocks: 0, locks: 0 },
-        { label: '6-9 PM', minH: 18, maxH: 21, unlocks: 0, locks: 0 },
-        { label: 'Late', minH: 21, maxH: 24, unlocks: 0, locks: 0 },
+        { label: '6-9 AM', minH: 6, maxH: 9, unlocks: 0, locks: 0, transfers: 0, overrides: 0 },
+        { label: '9-12 PM', minH: 9, maxH: 12, unlocks: 0, locks: 0, transfers: 0, overrides: 0 },
+        { label: '12-3 PM', minH: 12, maxH: 15, unlocks: 0, locks: 0, transfers: 0, overrides: 0 },
+        { label: '3-6 PM', minH: 15, maxH: 18, unlocks: 0, locks: 0, transfers: 0, overrides: 0 },
+        { label: '6-9 PM', minH: 18, maxH: 21, unlocks: 0, locks: 0, transfers: 0, overrides: 0 },
+        { label: 'Late', minH: 21, maxH: 24, unlocks: 0, locks: 0, transfers: 0, overrides: 0 },
       ];
 
       rangeFilteredRecords.forEach((h) => {
         const hour = new Date(h.timestamp).getHours();
         const slot = slots.find((s) => hour >= s.minH && hour < s.maxH) || slots[slots.length - 1];
-        if (h.locked) {
+        if (h.isEmergencyOverride) {
+          slot.overrides += 1;
+        } else if (isTransferRecord(h)) {
+          slot.transfers += 1;
+        } else if (h.locked) {
           slot.locks += 1;
         } else {
           slot.unlocks += 1;
         }
       });
-      return slots.map((s) => ({ label: s.label, unlocks: s.unlocks, locks: s.locks }));
+      return slots.map((s) => ({
+        label: s.label,
+        unlocks: s.unlocks,
+        locks: s.locks,
+        transfers: s.transfers,
+        overrides: s.overrides,
+      }));
     }
 
     if (timeRange === 'weekly') {
-      // Past 7 days individually
-      const dayBuckets: Record<string, { label: string; unlocks: number; locks: number }> = {};
+      const dayBuckets: Record<string, { label: string; unlocks: number; locks: number; transfers: number; overrides: number }> = {};
       const now = latestTimestamp;
       const oneDay = 24 * 60 * 60 * 1000;
 
-      // Initialize 7 days in chronological order
       for (let i = 6; i >= 0; i--) {
         const d = new Date(now - i * oneDay);
         const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
         const key = d.toDateString();
-        dayBuckets[key] = { label: `${dayName} ${d.getDate()}`, unlocks: 0, locks: 0 };
+        dayBuckets[key] = { label: `${dayName} ${d.getDate()}`, unlocks: 0, locks: 0, transfers: 0, overrides: 0 };
       }
 
       rangeFilteredRecords.forEach((h) => {
         const key = new Date(h.timestamp).toDateString();
         if (dayBuckets[key]) {
-          if (h.locked) dayBuckets[key].locks += 1;
+          if (h.isEmergencyOverride) dayBuckets[key].overrides += 1;
+          else if (isTransferRecord(h)) dayBuckets[key].transfers += 1;
+          else if (h.locked) dayBuckets[key].locks += 1;
           else dayBuckets[key].unlocks += 1;
         }
       });
@@ -151,8 +157,7 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ records: propR
     }
 
     if (timeRange === 'monthly') {
-      // Month's timeline: Group by active dates across the 30 days
-      const dateMap: Record<string, { label: string; timestamp: number; unlocks: number; locks: number }> = {};
+      const dateMap: Record<string, { label: string; timestamp: number; unlocks: number; locks: number; transfers: number; overrides: number }> = {};
 
       rangeFilteredRecords.forEach((h) => {
         const d = new Date(h.timestamp);
@@ -163,19 +168,23 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ records: propR
             timestamp: h.timestamp,
             unlocks: 0,
             locks: 0,
+            transfers: 0,
+            overrides: 0,
           };
         }
-        if (h.locked) {
+        if (h.isEmergencyOverride) {
+          dateMap[monthDay].overrides += 1;
+        } else if (isTransferRecord(h)) {
+          dateMap[monthDay].transfers += 1;
+        } else if (h.locked) {
           dateMap[monthDay].locks += 1;
         } else {
           dateMap[monthDay].unlocks += 1;
         }
       });
 
-      // Sort chronologically
       const sortedDates = Object.values(dateMap).sort((a, b) => a.timestamp - b.timestamp);
 
-      // If more than 14 days, sample evenly so chart stays clean
       let finalDates = sortedDates;
       if (sortedDates.length > 14) {
         const sampled: typeof sortedDates = [];
@@ -183,46 +192,61 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ records: propR
         for (let i = 0; i < sortedDates.length; i += step) {
           sampled.push(sortedDates[i]);
         }
-        // Always include the latest day
         if (sampled[sampled.length - 1] !== sortedDates[sortedDates.length - 1]) {
           sampled.push(sortedDates[sortedDates.length - 1]);
         }
         finalDates = sampled;
       }
 
-      return finalDates.map((d) => ({ label: d.label, unlocks: d.unlocks, locks: d.locks }));
+      return finalDates.map((d) => ({
+        label: d.label,
+        unlocks: d.unlocks,
+        locks: d.locks,
+        transfers: d.transfers,
+        overrides: d.overrides,
+      }));
     }
 
-    // Yearly: Group by months
-    const monthBuckets: Record<string, { label: string; order: number; unlocks: number; locks: number }> = {
-      May: { label: 'May', order: 5, unlocks: 12, locks: 14 },
-      Jun: { label: 'Jun', order: 6, unlocks: 18, locks: 19 },
-      Jul: { label: 'Jul', order: 7, unlocks: 24, locks: 22 },
-      Aug: { label: 'Aug', order: 8, unlocks: 0, locks: 0 },
-      Sep: { label: 'Sep', order: 9, unlocks: 0, locks: 0 },
-    };
+    // Yearly: dynamically group by month present in the real records
+    const monthBuckets: Record<string, { label: string; order: number; unlocks: number; locks: number; transfers: number; overrides: number }> = {};
 
     rangeFilteredRecords.forEach((h) => {
-      const monthName = new Date(h.timestamp).toLocaleDateString('en-US', { month: 'short' });
-      if (monthBuckets[monthName]) {
-        if (h.locked) monthBuckets[monthName].locks += 1;
-        else monthBuckets[monthName].unlocks += 1;
-      } else {
+      const d = new Date(h.timestamp);
+      const monthName = d.toLocaleDateString('en-US', { month: 'short' });
+      const order = d.getFullYear() * 12 + d.getMonth();
+      if (!monthBuckets[monthName]) {
         monthBuckets[monthName] = {
           label: monthName,
-          order: new Date(h.timestamp).getMonth() + 1,
-          unlocks: h.locked ? 0 : 1,
-          locks: h.locked ? 1 : 0,
+          order,
+          unlocks: 0,
+          locks: 0,
+          transfers: 0,
+          overrides: 0,
         };
+      }
+      if (h.isEmergencyOverride) {
+        monthBuckets[monthName].overrides += 1;
+      } else if (isTransferRecord(h)) {
+        monthBuckets[monthName].transfers += 1;
+      } else if (h.locked) {
+        monthBuckets[monthName].locks += 1;
+      } else {
+        monthBuckets[monthName].unlocks += 1;
       }
     });
 
-    return Object.values(monthBuckets)
-      .sort((a, b) => a.order - b.order)
-      .map((m) => ({ label: m.label, unlocks: m.unlocks, locks: m.locks }));
+    const sortedMonths = Object.values(monthBuckets).sort((a, b) => a.order - b.order);
+
+    return sortedMonths.map((m) => ({
+      label: m.label,
+      unlocks: m.unlocks,
+      locks: m.locks,
+      transfers: m.transfers,
+      overrides: m.overrides,
+    }));
   }, [rangeFilteredRecords, timeRange, latestTimestamp]);
 
-  // 2. Data for Peak Hours AreaChart (Computed dynamically from rangeFilteredRecords)
+  // 2. Data for Peak Hours AreaChart
   const hourlyData = useMemo(() => {
     const buckets = [
       { hour: '6 AM', entries: 0 },
@@ -238,7 +262,6 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ records: propR
 
     rangeFilteredRecords.forEach((h) => {
       let hourNum = new Date(h.timestamp).getHours();
-      // Map hour to nearest 2-hour bucket
       if (hourNum <= 7) buckets[0].entries += 1;
       else if (hourNum <= 9) buckets[1].entries += 1;
       else if (hourNum <= 11) buckets[2].entries += 1;
@@ -255,13 +278,15 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ records: propR
 
   // 3. Data for Actions PieChart
   const actionPieData = useMemo(() => {
-    const lockCount = rangeFilteredRecords.filter((h) => h.locked && !h.isEmergencyOverride).length;
-    const unlockCount = rangeFilteredRecords.filter((h) => !h.locked && !h.isEmergencyOverride).length;
+    const lockCount = rangeFilteredRecords.filter((h) => h.locked && !h.isEmergencyOverride && !isTransferRecord(h)).length;
+    const unlockCount = rangeFilteredRecords.filter((h) => !h.locked && !h.isEmergencyOverride && !isTransferRecord(h)).length;
+    const transferCount = rangeFilteredRecords.filter((h) => isTransferRecord(h) && !h.isEmergencyOverride).length;
     const emergencyCount = rangeFilteredRecords.filter((h) => h.isEmergencyOverride).length;
 
     return [
       { name: 'Secured Locks', value: lockCount, color: '#ef4444' },
       { name: 'Authorized Entries', value: unlockCount, color: '#10b981' },
+      { name: 'Room Transfers', value: transferCount, color: '#06b6d4' },
       { name: 'Emergency Overrides', value: emergencyCount, color: '#f59e0b' },
     ].filter((d) => d.value > 0);
   }, [rangeFilteredRecords]);
@@ -290,7 +315,7 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ records: propR
           </div>
           <div>
             <h3 className="text-base font-bold text-white tracking-wide">SmartLock Statistics</h3>
-            <p className="text-[11px] text-slate-400">Access frequency & engagement diagnostics</p>
+            <p className="text-[11px] text-slate-400">Visualizations of SmartLock Action Data</p>
           </div>
         </div>
       </div>
@@ -325,7 +350,6 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ records: propR
             );
           })}
         </div>
-
 
         <div className="grid grid-cols-4 gap-1.5 bg-[#090d16] p-1.5 rounded-xl border border-slate-800 text-xs font-mono">
           <button
@@ -402,12 +426,18 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ records: propR
                 iconType="circle"
                 wrapperStyle={{ paddingTop: '8px', fontSize: '11px' }}
                 formatter={(value: string) => {
-                  const total =
-                    value === 'Entries (Unlocks)'
-                      ? trendsData.reduce((acc, cur) => acc + cur.unlocks, 0)
-                      : trendsData.reduce((acc, cur) => acc + cur.locks, 0);
+                  let total = 0;
+                  if (value === 'Entries (Unlocks)') {
+                    total = trendsData.reduce((acc, cur) => acc + (cur.unlocks || 0), 0);
+                  } else if (value === 'Secured Locks') {
+                    total = trendsData.reduce((acc, cur) => acc + (cur.locks || 0), 0);
+                  } else if (value === 'Transfers') {
+                    total = trendsData.reduce((acc, cur) => acc + (cur.transfers || 0), 0);
+                  } else if (value === 'Overrides') {
+                    total = trendsData.reduce((acc, cur) => acc + (cur.overrides || 0), 0);
+                  }
                   return (
-                    <span className="text-slate-300 text-xs ml-1 mr-3">
+                    <span className="text-slate-300 text-xs ml-1 mr-2.5">
                       {value}: <strong className="text-white font-mono">{total}</strong>
                     </span>
                   );
@@ -415,6 +445,8 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ records: propR
               />
               <Bar dataKey="unlocks" name="Entries (Unlocks)" fill="#10b981" radius={[4, 4, 0, 0]} />
               <Bar dataKey="locks" name="Secured Locks" fill="#ef4444" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="transfers" name="Transfers" fill="#06b6d4" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="overrides" name="Overrides" fill="#f59e0b" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         )}

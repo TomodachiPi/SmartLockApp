@@ -251,22 +251,24 @@ export const AccessScheduleModal: React.FC<AccessScheduleModalProps> = ({
         const is24 =
           timeStr.toLowerCase().includes('24/7') ||
           timeStr.toLowerCase().includes('any time') ||
-          timeStr.toLowerCase().includes('unlimited');
+          timeStr.toLowerCase().includes('unlimited') ||
+          (scheduleToEdit.startTime === '12:00 AM' && scheduleToEdit.endTime === '11:59 PM');
 
         setUniform24Hours(is24);
-        setUniformStartTime(scheduleToEdit.startTime || '09:00 AM');
-        setUniformEndTime(scheduleToEdit.endTime || '05:00 PM');
+        setUniformStartTime(is24 ? '12:00 AM' : (scheduleToEdit.startTime || '09:00 AM'));
+        setUniformEndTime(is24 ? '11:59 PM' : (scheduleToEdit.endTime || '05:00 PM'));
 
         if (scheduleToEdit.dayConfigs && typeof scheduleToEdit.dayConfigs === 'object' && Object.keys(scheduleToEdit.dayConfigs).length > 0) {
           const nextConfigs: Record<string, DayState> = {};
           ALL_DAYS.forEach((d) => {
             const existing = scheduleToEdit.dayConfigs?.[d.short];
             if (existing) {
+              const dayIs24 = !!existing.is24Hours || is24;
               nextConfigs[d.short] = {
                 enabled: !!existing.enabled,
-                is24Hours: !!existing.is24Hours,
-                startTime: existing.startTime || '09:00 AM',
-                endTime: existing.endTime || '05:00 PM',
+                is24Hours: dayIs24,
+                startTime: dayIs24 ? '12:00 AM' : (existing.startTime || '09:00 AM'),
+                endTime: dayIs24 ? '11:59 PM' : (existing.endTime || '05:00 PM'),
               };
             } else {
               nextConfigs[d.short] = {
@@ -286,8 +288,8 @@ export const AccessScheduleModal: React.FC<AccessScheduleModalProps> = ({
             nextConfigs[d.short] = {
               enabled: legacyDays.includes(d.short),
               is24Hours: is24,
-              startTime: scheduleToEdit.startTime || '09:00 AM',
-              endTime: scheduleToEdit.endTime || '05:00 PM',
+              startTime: is24 ? '12:00 AM' : (scheduleToEdit.startTime || '09:00 AM'),
+              endTime: is24 ? '11:59 PM' : (scheduleToEdit.endTime || '05:00 PM'),
             };
           });
           setDayConfigs(nextConfigs);
@@ -356,11 +358,32 @@ export const AccessScheduleModal: React.FC<AccessScheduleModalProps> = ({
       [dayShort]: {
         ...prev[dayShort],
         is24Hours: is24,
+        startTime: is24 ? '12:00 AM' : (prev[dayShort]?.startTime === '12:00 AM' ? '09:00 AM' : (prev[dayShort]?.startTime || '09:00 AM')),
+        endTime: is24 ? '11:59 PM' : (prev[dayShort]?.endTime === '11:59 PM' ? '05:00 PM' : (prev[dayShort]?.endTime || '05:00 PM')),
       },
     }));
   };
 
-  const applyDayPreset = (preset: 'all' | 'weekdays' | 'weekends' | 'clear') => {
+  const applyDayPreset = (preset: 'all' | 'weekdays' | 'weekends' | '24_7' | 'clear') => {
+    if (preset === '24_7') {
+      setDayConfigs(() => {
+        const next: Record<string, DayState> = {};
+        ALL_DAYS.forEach((d) => {
+          next[d.short] = {
+            enabled: true,
+            is24Hours: true,
+            startTime: '12:00 AM',
+            endTime: '11:59 PM',
+          };
+        });
+        return next;
+      });
+      setUniform24Hours(true);
+      setUniformStartTime('12:00 AM');
+      setUniformEndTime('11:59 PM');
+      return;
+    }
+
     setDayConfigs((prev) => {
       const next = { ...prev };
       ALL_DAYS.forEach((d) => {
@@ -387,8 +410,8 @@ export const AccessScheduleModal: React.FC<AccessScheduleModalProps> = ({
           next[d.short] = {
             ...(next[d.short] || { enabled: true }),
             is24Hours: uniform24Hours,
-            startTime: uniformStartTime,
-            endTime: uniformEndTime,
+            startTime: uniform24Hours ? '12:00 AM' : uniformStartTime,
+            endTime: uniform24Hours ? '11:59 PM' : uniformEndTime,
           };
         }
       });
@@ -434,20 +457,21 @@ export const AccessScheduleModal: React.FC<AccessScheduleModalProps> = ({
 
     const enabledDays = ALL_DAYS.filter((d) => dayConfigs[d.short]?.enabled).map((d) => d.short);
 
-    // Build dayConfigs object
+    // Build dayConfigs object with clean 24/7 bounds
     const finalDayConfigs: Record<string, DayScheduleConfig> = {};
     ALL_DAYS.forEach((d) => {
+      const is24 = !!dayConfigs[d.short]?.is24Hours;
       finalDayConfigs[d.short] = {
         enabled: dayConfigs[d.short]?.enabled || false,
-        is24Hours: dayConfigs[d.short]?.is24Hours || false,
-        startTime: dayConfigs[d.short]?.startTime || '09:00 AM',
-        endTime: dayConfigs[d.short]?.endTime || '05:00 PM',
+        is24Hours: is24,
+        startTime: is24 ? '12:00 AM' : (dayConfigs[d.short]?.startTime || '09:00 AM'),
+        endTime: is24 ? '11:59 PM' : (dayConfigs[d.short]?.endTime || '05:00 PM'),
       };
     });
 
     // Generate concise summary time string
     let timeSummary = '';
-    const all24 = enabledDays.every((d) => dayConfigs[d]?.is24Hours);
+    const all24 = enabledDays.length > 0 && enabledDays.every((d) => dayConfigs[d]?.is24Hours);
     const sameTime =
       !all24 &&
       enabledDays.every(
@@ -474,13 +498,21 @@ export const AccessScheduleModal: React.FC<AccessScheduleModalProps> = ({
       // Group custom days
       const parts = enabledDays.map((d) => {
         const cfg = dayConfigs[d];
-        if (cfg.is24Hours) return `${d}: 24/7`;
+        if (cfg.is24Hours) return `${d}: 24/7 (12:00 AM - 11:59 PM)`;
         return `${d}: ${cfg.startTime}-${cfg.endTime}`;
       });
       timeSummary = parts.join(', ');
     }
 
     const firstActiveDay = enabledDays[0] ? dayConfigs[enabledDays[0]] : null;
+    const isFirstActive24 = firstActiveDay ? !!firstActiveDay.is24Hours : false;
+
+    const resolvedStartTime = (all24 || isFirstActive24)
+      ? '12:00 AM'
+      : (firstActiveDay?.startTime || '09:00 AM');
+    const resolvedEndTime = (all24 || isFirstActive24)
+      ? '11:59 PM'
+      : (firstActiveDay?.endTime || '05:00 PM');
 
     if (scheduleToEdit) {
       updateSchedule({
@@ -489,8 +521,8 @@ export const AccessScheduleModal: React.FC<AccessScheduleModalProps> = ({
         role,
         time: timeSummary,
         days: enabledDays,
-        startTime: firstActiveDay?.startTime || '09:00 AM',
-        endTime: firstActiveDay?.endTime || '05:00 PM',
+        startTime: resolvedStartTime,
+        endTime: resolvedEndTime,
         dayConfigs: finalDayConfigs,
         status,
       });
@@ -500,8 +532,8 @@ export const AccessScheduleModal: React.FC<AccessScheduleModalProps> = ({
         role,
         time: timeSummary,
         days: enabledDays,
-        startTime: firstActiveDay?.startTime || '09:00 AM',
-        endTime: firstActiveDay?.endTime || '05:00 PM',
+        startTime: resolvedStartTime,
+        endTime: resolvedEndTime,
         dayConfigs: finalDayConfigs,
         status,
       });
@@ -540,10 +572,10 @@ export const AccessScheduleModal: React.FC<AccessScheduleModalProps> = ({
             </div>
             <div>
               <h3 className="text-base font-black text-white tracking-wide">
-                {scheduleToEdit ? 'Modify Access Schedule Policy' : 'Configure Access Schedule Policy'}
+                Modify Access Schedule
               </h3>
               <p className="text-[11px] text-slate-400">
-                Set personalized days & time windows per user
+                Set days & time access schedules
               </p>
             </div>
           </div>
@@ -642,9 +674,6 @@ export const AccessScheduleModal: React.FC<AccessScheduleModalProps> = ({
                             >
                               {p.type}
                             </span>
-                            {userHasSchedule && (
-                              <span className="text-[9px] font-mono text-emerald-400">• Scheduled</span>
-                            )}
                           </div>
                         </div>
                       </button>
@@ -660,40 +689,47 @@ export const AccessScheduleModal: React.FC<AccessScheduleModalProps> = ({
             <div className="flex items-center justify-between flex-wrap gap-1">
               <label className="text-xs font-bold text-white flex items-center gap-1.5">
                 <Calendar className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Authorized Days</span>
+                <span>Day</span>
               </label>
+            </div>
 
-              {/* Quick Day Presets */}
-              <div className="flex items-center gap-1 text-[10px] font-mono">
-                <button
-                  type="button"
-                  onClick={() => applyDayPreset('all')}
-                  className="px-1.5 py-0.5 rounded bg-[#111827] text-cyan-400 hover:bg-cyan-500/20 border border-slate-700 cursor-pointer"
-                >
-                  All Days
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyDayPreset('weekdays')}
-                  className="px-1.5 py-0.5 rounded bg-[#111827] text-cyan-400 hover:bg-cyan-500/20 border border-slate-700 cursor-pointer"
-                >
-                  Mon-Fri
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyDayPreset('weekends')}
-                  className="px-1.5 py-0.5 rounded bg-[#111827] text-cyan-400 hover:bg-cyan-500/20 border border-slate-700 cursor-pointer"
-                >
-                  Sat-Sun
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyDayPreset('clear')}
-                  className="px-1.5 py-0.5 rounded bg-[#111827] text-slate-400 hover:text-red-400 border border-slate-700 cursor-pointer"
-                >
-                  Clear
-                </button>
-              </div>
+            <div className="grid grid-cols-3 items-center gap-1 text-[10px] font-mono flex-wrap">
+              <button
+                type="button"
+                onClick={() => applyDayPreset('24_7')}
+                className="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 border border-cyan-500/40 font-bold cursor-pointer"
+              >
+                Daily 24/7
+              </button>
+              <button
+                type="button"
+                onClick={() => applyDayPreset('all')}
+                className="px-1.5 py-0.5 rounded bg-[#111827] text-cyan-400 hover:bg-cyan-500/20 border border-slate-700 cursor-pointer"
+              >
+                Daily
+              </button>
+              <button
+                type="button"
+                onClick={() => applyDayPreset('weekdays')}
+                className="px-1.5 py-0.5 rounded bg-[#111827] text-cyan-400 hover:bg-cyan-500/20 border border-slate-700 cursor-pointer"
+              >
+                Mon to Fri
+              </button>
+              <button
+                type="button"
+                onClick={() => applyDayPreset('weekends')}
+                className="px-1.5 py-0.5 rounded bg-[#111827] text-cyan-400 hover:bg-cyan-500/20 border border-slate-700 cursor-pointer"
+              >
+                Sat to Sun
+              </button>
+              <span></span>
+              <button
+                type="button"
+                onClick={() => applyDayPreset('clear')}
+                className="px-1.5 py-0.5 rounded bg-[#111827] text-slate-400 hover:text-red-400 border border-slate-700 cursor-pointer"
+              >
+                Clear
+              </button>
             </div>
 
             {/* 7 Days Toggle Buttons */}
@@ -727,7 +763,7 @@ export const AccessScheduleModal: React.FC<AccessScheduleModalProps> = ({
             <div className="flex items-center justify-between pb-2 border-b border-slate-800">
               <label className="text-xs font-bold text-white flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Authorized Time Windows</span>
+                <span>Time</span>
               </label>
 
               <div className="flex bg-[#111827] p-0.5 rounded-lg border border-slate-700 text-[10px] font-mono">
@@ -740,7 +776,7 @@ export const AccessScheduleModal: React.FC<AccessScheduleModalProps> = ({
                       : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  Custom Per Day
+                  Per Day
                 </button>
                 <button
                   type="button"
@@ -760,7 +796,6 @@ export const AccessScheduleModal: React.FC<AccessScheduleModalProps> = ({
             {activeTab === 'uniform' && (
               <div className="space-y-3 p-3 bg-[#111827] rounded-xl border border-slate-700/80 animate-fade-in">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-300 font-bold">Configure Common Time Window:</span>
                   <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
                     <input
                       type="checkbox"
@@ -768,12 +803,12 @@ export const AccessScheduleModal: React.FC<AccessScheduleModalProps> = ({
                       onChange={(e) => setUniform24Hours(e.target.checked)}
                       className="rounded border-slate-700 text-cyan-500 focus:ring-0 cursor-pointer"
                     />
-                    <span className="text-[11px] font-mono text-cyan-300">24/7 Unlimited Access</span>
+                    <span className="text-[11px] font-mono text-cyan-300">Every Day with 24/7 Access</span>
                   </label>
                 </div>
 
                 {!uniform24Hours && (
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3">
                     <TimePickerSelect
                       label="Starting Time"
                       value={uniformStartTime}
@@ -793,19 +828,13 @@ export const AccessScheduleModal: React.FC<AccessScheduleModalProps> = ({
                   className="w-full bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 py-2 rounded-xl text-xs font-mono font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
                 >
                   <Copy className="w-3.5 h-3.5" />
-                  <span>Apply this time window to all active days</span>
+                  <span>Apply to all</span>
                 </button>
               </div>
             )}
 
             {/* CUSTOM PER-DAY TIME WINDOWS */}
             <div className="space-y-3">
-              <span className="text-[11px] font-mono text-slate-400 font-semibold block">
-                {activeTab === 'custom'
-                  ? 'Set custom access hours for each active day:'
-                  : 'Current Day-by-Day Schedule overview:'}
-              </span>
-
               <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
                 {ALL_DAYS.map((day) => {
                   const cfg = dayConfigs[day.short] || {
@@ -876,7 +905,7 @@ export const AccessScheduleModal: React.FC<AccessScheduleModalProps> = ({
 
                       {/* Time Pickers for this day (if not 24/7) */}
                       {!cfg.is24Hours && (
-                        <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-800">
+                        <div className="grid grid-cols-1 gap-3 pt-1 border-t border-slate-800">
                           <TimePickerSelect
                             label="Start"
                             value={cfg.startTime || '09:00 AM'}

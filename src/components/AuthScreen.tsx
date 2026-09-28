@@ -2,16 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { DoorSelectModal } from './DoorSelectModal';
 import {
+  Shield,
   CheckCircle2,
   AlertCircle,
-  Sparkles,
-  Shield,
-  Lock,
-  Unlock,
-  KeyRound,
-  UserCheck,
   DoorClosed,
-  Sliders,
   ChevronRight,
 } from 'lucide-react';
 import padlock_png from "./../assets/images/padlock.png";
@@ -22,7 +16,6 @@ export const AuthScreen: React.FC = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showingLogin, setShowingLogin] = useState(true);
-  const [selectedDoorId, setSelectedDoorId] = useState('lab-door-1');
   const [selectedDoorName, setSelectedDoorName] = useState('Laboratory Door 1');
   const [isDoorModalOpen, setIsDoorModalOpen] = useState(false);
 
@@ -102,38 +95,36 @@ export const AuthScreen: React.FC = () => {
           <img
             src={padlock_png}
             alt="SmartLock Padlock"
-            className="w-42 h-42 object-contain relative drop-shadow-[0_10px_20px_rgba(6,182,212,0.3)]"
+            className="w-36 h-36 sm:w-40 sm:h-40 object-contain relative drop-shadow-[0_10px_20px_rgba(6,182,212,0.3)]"
           />
         </div>
-        <h1 className="text-4xl font-black text-white tracking-tight">SmartLock</h1>
-        <p className="text-sm font-mono text-cyan-400 mt-1">Created by Group No. 1</p>
-        <p className="text-xs font-mono text-slate-400 mt-0.5">
+        <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">SmartLock</h1>
+        <p className="text-sm font-mono text-cyan-400 mt-1 font-semibold">Created by Group No. 1</p>
+        <p className="text-xs sm:text-sm font-mono text-slate-400 mt-0.5">
           It is currently {formattedTime}
         </p>
-        <p className="text-xs font-mono text-slate-400 mt-0.5">
+        <p className="text-xs sm:text-sm font-mono text-slate-400 mt-0.5">
           {formattedDate}
         </p>
       </div>
 
-      {/* Target Door Selector Pushable Button & Telemetry */}
+      {/* Target Door Selector Button */}
       <div className="w-full mb-5">
         <button
           id="auth-door-select-btn"
           type="button"
           onClick={() => setIsDoorModalOpen(true)}
-          className="w-full bg-[#111827] hover:bg-[#162032] border border-slate-800 hover:border-cyan-500/50 rounded-2xl p-3.5 flex items-center justify-between text-left transition-all duration-200 shadow-md group cursor-pointer"
+          className="w-full bg-[#111827] hover:bg-[#162032] border border-slate-800 hover:border-cyan-500/50 rounded-2xl p-4 flex items-center justify-between text-left transition-all duration-200 shadow-md group cursor-pointer min-h-[52px]"
         >
           <div className="flex items-center gap-3">
-            <div className="bg-cyan-500/10 group-hover:bg-cyan-500/20 p-2.5 rounded-xl text-cyan-400 border border-cyan-500/30 transition-colors">
-              {locked ? <DoorClosed className="w-5 h-5" /> : <DoorClosed className="w-5 h-5 text-emerald-400" />}
+            <div className="bg-cyan-500/10 group-hover:bg-cyan-500/20 p-2.5 rounded-xl text-cyan-400 border border-cyan-500/30 transition-colors shrink-0">
+              {locked ? <DoorClosed className="w-5 h-5 text-red-400" /> : <DoorClosed className="w-5 h-5 text-emerald-400" />}
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-white group-hover:text-cyan-300 transition-colors">
-                  {selectedDoorName}
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-400 font-mono mt-0.5 flex items-center gap-1.5">
+              <span className="text-sm sm:text-base font-bold text-white group-hover:text-cyan-300 transition-colors block">
+                {selectedDoorName}
+              </span>
+              <p className="text-xs text-slate-400 font-mono mt-0.5 flex items-center gap-1.5 font-medium">
                 <span className={locked ? 'text-red-400' : 'text-emerald-400'}>
                   {locked ? 'Currently Locked' : 'Currently Unlocked'}
                 </span>
@@ -141,8 +132,8 @@ export const AuthScreen: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-1 text-xs font-mono text-cyan-400 group-hover:translate-x-0.5 transition-transform">
-            <span className="text-[11px] font-bold">Select Lock</span>
+          <div className="flex items-center gap-1 text-xs sm:text-sm font-mono text-cyan-400 group-hover:translate-x-0.5 transition-transform shrink-0">
+            <span className="font-bold">Select Lock</span>
             <ChevronRight className="w-4 h-4" />
           </div>
         </button>
@@ -152,20 +143,20 @@ export const AuthScreen: React.FC = () => {
       {registrationNotice && (
         <div
           id="registration-success-alert"
-          className="w-full mb-5 bg-emerald-500/15 border border-emerald-500/50 text-white p-3.5 rounded-2xl shadow-lg flex items-start gap-3 animate-fade-in"
+          className="w-full mb-5 bg-emerald-500/15 border border-emerald-500/50 text-white p-4 rounded-2xl shadow-lg flex items-start gap-3 animate-fade-in"
         >
           <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
           <div className="flex-1">
-            <h4 className="text-xs font-mono font-bold text-emerald-400 uppercase tracking-wider">
+            <h4 className="text-xs sm:text-sm font-mono font-bold text-emerald-400 uppercase tracking-wider">
               Registration Successful!
             </h4>
-            <p className="text-xs text-slate-200 mt-0.5 leading-relaxed">
+            <p className="text-xs sm:text-sm text-slate-200 mt-0.5 leading-relaxed">
               {registrationNotice}
             </p>
           </div>
           <button
             onClick={dismissRegistrationNotice}
-            className="text-slate-400 hover:text-white text-xs font-bold px-1.5 py-0.5 rounded cursor-pointer"
+            className="text-slate-400 hover:text-white text-sm font-bold p-1 rounded cursor-pointer"
           >
             ✕
           </button>
@@ -175,7 +166,7 @@ export const AuthScreen: React.FC = () => {
       {/* Login vs Sign In Request Tabs */}
       <div
         id="auth-toggle-buttons"
-        className="flex items-center justify-center w-full bg-[#111827] p-1 rounded-2xl border border-slate-800 mb-6 font-mono text-xs"
+        className="flex items-center justify-center w-full bg-[#111827] p-1.5 rounded-2xl border border-slate-800 mb-6 font-mono text-xs sm:text-sm"
       >
         <button
           id="toggle-login-tab"
@@ -186,7 +177,7 @@ export const AuthScreen: React.FC = () => {
             setShowIncorrectPassword(false);
             setShowUsernameTaken(false);
           }}
-          className={`flex-1 py-2.5 text-center font-bold rounded-xl transition-all cursor-pointer ${
+          className={`flex-1 py-3 text-center font-bold rounded-xl transition-all cursor-pointer min-h-[44px] ${
             showingLogin
               ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 shadow-md font-black'
               : 'text-slate-400 hover:text-white'
@@ -204,7 +195,7 @@ export const AuthScreen: React.FC = () => {
             setShowIncorrectPassword(false);
             setShowUsernameTaken(false);
           }}
-          className={`flex-1 py-2.5 text-center font-bold rounded-xl transition-all cursor-pointer ${
+          className={`flex-1 py-3 text-center font-bold rounded-xl transition-all cursor-pointer min-h-[44px] ${
             !showingLogin
               ? 'bg-emerald-500 text-slate-950 shadow-md font-black'
               : 'text-slate-400 hover:text-white'
@@ -219,7 +210,7 @@ export const AuthScreen: React.FC = () => {
         {showingLogin ? (
           <form onSubmit={handleLoginSubmit} id="login-form" className="space-y-4">
             <div>
-              <label className="block text-xs font-mono font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+              <label className="block text-xs sm:text-sm font-mono font-bold text-slate-300 uppercase tracking-wider mb-2">
                 Username:
               </label>
               <input
@@ -228,13 +219,13 @@ export const AuthScreen: React.FC = () => {
                 placeholder="Enter username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full bg-[#111827] border border-slate-800 text-white px-3.5 py-2.5 rounded-xl focus:outline-none focus:border-cyan-500 transition-colors placeholder:text-slate-500 text-xs"
+                className="w-full bg-[#111827] border border-slate-800 text-white px-4 py-3 rounded-xl focus:outline-none focus:border-cyan-500 transition-colors placeholder:text-slate-500 text-sm sm:text-base min-h-[48px]"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-xs font-mono font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+              <label className="block text-xs sm:text-sm font-mono font-bold text-slate-300 uppercase tracking-wider mb-2">
                 Password:
               </label>
               <input
@@ -243,7 +234,7 @@ export const AuthScreen: React.FC = () => {
                 placeholder="Enter password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-[#111827] border border-slate-800 text-white px-3.5 py-2.5 rounded-xl focus:outline-none focus:border-cyan-500 transition-colors placeholder:text-slate-500 text-xs"
+                className="w-full bg-[#111827] border border-slate-800 text-white px-4 py-3 rounded-xl focus:outline-none focus:border-cyan-500 transition-colors placeholder:text-slate-500 text-sm sm:text-base min-h-[48px]"
                 required
               />
             </div>
@@ -252,9 +243,9 @@ export const AuthScreen: React.FC = () => {
             {showIncorrectUsername && (
               <div
                 id="alert-user-not-found"
-                className="bg-red-500/15 border border-red-500/40 text-red-300 px-3.5 py-2.5 rounded-xl text-xs flex items-center gap-2 shadow-lg animate-fade-in"
+                className="bg-red-500/15 border border-red-500/40 text-red-300 px-4 py-3 rounded-xl text-xs sm:text-sm flex items-center gap-2.5 shadow-lg animate-fade-in"
               >
-                <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+                <AlertCircle className="w-5 h-5 shrink-0 text-red-400" />
                 <span>Username not recognized in system database.</span>
               </div>
             )}
@@ -262,23 +253,21 @@ export const AuthScreen: React.FC = () => {
             {showIncorrectPassword && (
               <div
                 id="alert-incorrect-password"
-                className="bg-red-500/15 border border-red-500/40 text-red-300 px-3.5 py-2.5 rounded-xl text-xs flex items-center gap-2 shadow-lg animate-fade-in"
+                className="bg-red-500/15 border border-red-500/40 text-red-300 px-4 py-3 rounded-xl text-xs sm:text-sm flex items-center gap-2.5 shadow-lg animate-fade-in"
               >
-                <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
-                <span>Incorrect credentials for this account.</span>
+                <AlertCircle className="w-5 h-5 shrink-0 text-red-400" />
+                <span>Incorrect password. Please verify and try again.</span>
               </div>
             )}
 
             <button
-              id="login-submit-button"
+              id="login-submit-btn"
               type="submit"
-              className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 shadow-[0_0_20px_rgba(6,182,212,0.3)] cursor-pointer mt-2"
+              className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black py-3.5 px-4 rounded-xl transition-all shadow-[0_0_20px_rgba(6,182,212,0.3)] cursor-pointer text-sm sm:text-base tracking-wide mt-2 min-h-[48px]"
             >
-              <Lock className="w-4 h-4" />
-              <span className="text-sm tracking-wide">Log in</span>
+              Sign In to SmartLock
             </button>
 
-            {/* Default credentials quick switcher */}
             <div className="mt-4 p-3.5 bg-[#111827] border border-slate-800 rounded-2xl text-xs text-slate-400 space-y-2">
               <div className="flex items-center gap-1.5 text-white font-mono text-xs font-bold">
                 <Shield className="w-3.5 h-3.5 text-cyan-400" />
@@ -321,31 +310,31 @@ export const AuthScreen: React.FC = () => {
         ) : (
           <form onSubmit={handleRegisterSubmit} id="register-form" className="space-y-4">
             <div>
-              <label className="block text-xs font-mono font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                Username:
+              <label className="block text-xs sm:text-sm font-mono font-bold text-slate-300 uppercase tracking-wider mb-2">
+                Desired Username:
               </label>
               <input
                 id="register-username-input"
                 type="text"
-                placeholder="Please input username"
+                placeholder="Choose a username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full bg-[#111827] border border-slate-800 text-white px-3.5 py-2.5 rounded-xl focus:outline-none focus:border-emerald-500 transition-colors placeholder:text-slate-500 text-xs"
+                className="w-full bg-[#111827] border border-slate-800 text-white px-4 py-3 rounded-xl focus:outline-none focus:border-cyan-500 transition-colors placeholder:text-slate-500 text-sm sm:text-base min-h-[48px]"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-xs font-mono font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                Password:
+              <label className="block text-xs sm:text-sm font-mono font-bold text-slate-300 uppercase tracking-wider mb-2">
+                Create Password:
               </label>
               <input
                 id="register-password-input"
                 type="password"
-                placeholder="Please input password"
+                placeholder="Set secure password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-[#111827] border border-slate-800 text-white px-3.5 py-2.5 rounded-xl focus:outline-none focus:border-emerald-500 transition-colors placeholder:text-slate-500 text-xs"
+                className="w-full bg-[#111827] border border-slate-800 text-white px-4 py-3 rounded-xl focus:outline-none focus:border-cyan-500 transition-colors placeholder:text-slate-500 text-sm sm:text-base min-h-[48px]"
                 required
               />
             </div>
@@ -353,37 +342,31 @@ export const AuthScreen: React.FC = () => {
             {showUsernameTaken && (
               <div
                 id="alert-username-taken"
-                className="bg-red-500/15 border border-red-500/40 text-red-300 px-3.5 py-2.5 rounded-xl text-xs flex items-center gap-2 shadow-lg animate-fade-in"
+                className="bg-red-500/15 border border-red-500/40 text-red-300 px-4 py-3 rounded-xl text-xs sm:text-sm flex items-center gap-2.5 shadow-lg animate-fade-in"
               >
-                <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
-                <span>Username already taken or pending administrator review!</span>
+                <AlertCircle className="w-5 h-5 shrink-0 text-red-400" />
+                <span>That username is already registered or requested.</span>
               </div>
             )}
 
             <button
-              id="register-submit-button"
+              id="register-submit-btn"
               type="submit"
-              className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-black py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 shadow-[0_0_20px_rgba(16,185,129,0.3)] cursor-pointer mt-2"
+              className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3.5 px-4 rounded-xl transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] cursor-pointer text-sm sm:text-base tracking-wide mt-2 min-h-[48px]"
             >
-              <UserCheck className="w-4 h-4" />
-              <span className="text-sm tracking-wide">Submit Registration Request</span>
+              Submit Registration Request
             </button>
-
-            <p className="text-xs text-slate-400 text-center pt-1 leading-relaxed">
-              New accounts will have to be reviewed by System Administrators before approval and creation.
-            </p>
           </form>
         )}
       </div>
 
-      {/* Target Door Selection & Actuator Control Modal */}
       <DoorSelectModal
         isOpen={isDoorModalOpen}
         onClose={() => setIsDoorModalOpen(false)}
-        selectedDoorId={selectedDoorId}
-        onSelectDoor={(id, name) => {
-          setSelectedDoorId(id);
-          setSelectedDoorName(name);
+        selectedDoorId="lab-door-1"
+        onSelectDoor={(_doorId, doorName) => {
+          setSelectedDoorName(doorName);
+          setIsDoorModalOpen(false);
         }}
       />
     </div>

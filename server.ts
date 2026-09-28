@@ -136,6 +136,84 @@ let labNotes: any[] = [];
 let emergencyAlerts: any[] = [];
 let adminNotifications: any[] = [];
 
+function normalizeHistoryRecord(item: any): any {
+  if (!item) return item;
+  const now = new Date();
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const todayStr = `${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
+  const hours = now.getHours();
+  const minutes = now.getMinutes();
+  const nowTimeStr = `${hours % 12 || 12}:${String(minutes).padStart(2, '0')} ${hours >= 12 ? 'PM' : 'AM'}`;
+
+  // 1. Calculate proper millisecond timestamp (year 2024+)
+  let ts = item.timestamp;
+  if (typeof ts === 'number' && !isNaN(ts)) {
+    if (ts >= 1000000000000) {
+      // valid ms
+    } else if (ts >= 1000000000) {
+      ts = ts * 1000;
+    } else {
+      // small ESP uptime
+      ts = undefined;
+    }
+  } else {
+    ts = undefined;
+  }
+
+  // 2. Fix date if placeholder
+  let date = (item.date || '').trim();
+  if (!date || date.toLowerCase() === 'today' || date.toLowerCase() === 'yesterday' || date.toLowerCase().includes('undefined')) {
+    date = todayStr;
+  }
+
+  // 3. Fix startingTime & endingTime if placeholder
+  let startingTime = (item.startingTime || '').trim();
+  if (!startingTime || startingTime.toLowerCase().includes('recent') || startingTime.toLowerCase().includes('just now') || startingTime.toLowerCase().includes('undefined')) {
+    startingTime = nowTimeStr;
+  }
+  let endingTime = (item.endingTime || '').trim();
+  if (!endingTime || endingTime.toLowerCase().includes('recent') || endingTime.toLowerCase().includes('just now') || endingTime.toLowerCase().includes('undefined')) {
+    endingTime = nowTimeStr;
+  }
+
+  if (!ts) {
+    const parsed = Date.parse(`${date} ${startingTime}`);
+    ts = !isNaN(parsed) && parsed > 1000000000000 ? parsed : Date.now();
+  }
+
+  return {
+    ...item,
+    date,
+    startingTime,
+    endingTime,
+    timestamp: ts,
+  };
+}
+
+function deduplicateHistory(records: any[]): any[] {
+  const seenIds = new Set<string>();
+  const seenSignatures = new Set<string>();
+  const result: any[] = [];
+
+  for (const rawItem of records) {
+    if (!rawItem || !rawItem.id) continue;
+    const item = normalizeHistoryRecord(rawItem);
+    if (seenIds.has(item.id)) continue;
+
+    const roughTime = Math.round((item.timestamp || 0) / 15000);
+    const sig = `${(item.username || '').toLowerCase()}_${item.date}_${item.startingTime}_${(item.notes || '').slice(0, 30)}_${item.locked}_${roughTime}`;
+
+    if (seenSignatures.has(sig)) continue;
+
+    seenIds.add(item.id);
+    seenSignatures.add(sig);
+    result.push(item);
+  }
+
+  result.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+  return result;
+}
+
 // Helper to format date & time
 function formatDateTime(d = new Date()) {
   const hours = d.getHours();
@@ -222,7 +300,6 @@ function startLockTransition(targetLocked: boolean, actingUser = 'Administrator'
       smartLockState.lastUpdated = Date.now();
 
       const { timeStr, dateStr } = formatDateTime();
-      const previousTime = history.length > 0 ? history[0].endingTime : '8:00 AM';
 
       if (targetLocked) {
         smartLockState.activeRoomHolder = null;
@@ -238,7 +315,7 @@ function startLockTransition(targetLocked: boolean, actingUser = 'Administrator'
         permission: 'EMERGENCY OVERRIDE',
         userType: role,
         locked: false,
-        startingTime: previousTime,
+        startingTime: timeStr,
         endingTime: timeStr,
         date: dateStr,
         timestamp: Date.now(),
@@ -251,14 +328,14 @@ function startLockTransition(targetLocked: boolean, actingUser = 'Administrator'
         permission: role === 'admin' ? 'Admin Privilege' : 'Standard User Access',
         userType: role,
         locked: targetLocked,
-        startingTime: previousTime,
+        startingTime: timeStr,
         endingTime: timeStr,
         date: dateStr,
         timestamp: Date.now(),
         notes: targetLocked ? 'Door locked securely via WebSocket' : 'Door opened with authorized credential via WebSocket',
       };
 
-      history = [histRecord, ...history];
+      history = deduplicateHistory([histRecord, ...history]);
 
       const notif: any = {
         id: `notif-${Date.now()}`,
@@ -399,27 +476,73 @@ wss.on('connection', (ws) => {
             const accept = !!parsed.accept;
             const found = roomTransfers.find((t) => t.id === transferId);
 
-            if (found && accept) {
-              const isAccessReq = found.requestType === 'request';
-              const relinquishing = isAccessReq ? found.toUsername : found.fromUsername;
-              const gaining = isAccessReq ? found.fromUsername : found.toUsername;
+            if (accept) {
+              const reqType = found?.requestType || parsed.requestType || 'transfer';
+              const isAccessReq = reqType === 'request';
+              const relinquishing =
+                parsed.relinquishing ||
+                (isAccessReq
+                  ? found?.toUsername || parsed.toUsername
+                  : found?.fromUsername || parsed.fromUsername) ||
+                'Administrator';
+              const gaining =
+                parsed.gaining ||
+                (isAccessReq
+                  ? found?.fromUsername || parsed.fromUsername
+                  : found?.toUsername || parsed.toUsername) ||
+                'User';
 
-              roomTransfers = roomTransfers.map((t) =>
-                t.id === transferId
-                  ? { ...t, status: 'accepted', resolvedAt: `${timeStr}, ${dateStr}` }
-                  : t
-              ).filter((t) => t.id === transferId || t.status !== 'pending');
+              if (found) {
+                roomTransfers = roomTransfers
+                  .map((t) =>
+                    t.id === transferId
+                      ? { ...t, status: 'accepted', resolvedAt: `${timeStr}, ${dateStr}` }
+                      : t
+                  )
+                  .filter((t) => t.id === transferId || t.status !== 'pending');
+              } else {
+                roomTransfers = [
+                  {
+                    id: transferId || `transfer-${Date.now()}`,
+                    requestType: reqType,
+                    fromUsername: parsed.fromUsername || relinquishing,
+                    toUsername: parsed.toUsername || gaining,
+                    doorName: 'Laboratory SmartLock #1',
+                    timestamp: `${timeStr}, ${dateStr}`,
+                    timestampMs: Date.now(),
+                    status: 'accepted',
+                    resolvedAt: `${timeStr}, ${dateStr}`,
+                  },
+                  ...roomTransfers.filter((t) => t.status !== 'pending'),
+                ];
+              }
 
               smartLockState.activeRoomHolder = gaining;
               smartLockState.version += 1;
               smartLockState.lastUpdated = Date.now();
 
-              // Add history records
-              const gainRecord = {
-                id: `hist-gain-${Date.now()}`,
+              const relinqUser = profiles.find((p) => p.username.toLowerCase() === String(relinquishing).toLowerCase());
+              const gainUser = profiles.find((p) => p.username.toLowerCase() === String(gaining).toLowerCase());
+
+              // Add history records for both parties
+              const relinqRecord = parsed.relinqRecord || {
+                id: `hist-relinq-${transferId || Date.now()}`,
+                username: relinquishing,
+                permission: relinqUser?.permission || (String(relinquishing).toLowerCase() === 'administrator' ? 'Admin Privilege' : 'Standard User Access'),
+                userType: (String(relinquishing).toLowerCase() === 'administrator' || relinqUser?.type === 'admin') ? 'admin' : 'user',
+                locked: false,
+                startingTime: timeStr,
+                endingTime: timeStr,
+                date: dateStr,
+                timestamp: Date.now() - 1,
+                notes: `Relinquished room custody for Laboratory SmartLock #1 (Transferred to ${gaining})`,
+              };
+
+              const gainRecord = parsed.gainRecord || {
+                id: `hist-gain-${transferId || Date.now()}`,
                 username: gaining,
-                permission: 'Standard User Access',
-                userType: 'user',
+                permission: gainUser?.permission || (String(gaining).toLowerCase() === 'administrator' ? 'Admin Privilege' : 'Standard User Access'),
+                userType: (String(gaining).toLowerCase() === 'administrator' || gainUser?.type === 'admin') ? 'admin' : 'user',
                 locked: false,
                 startingTime: timeStr,
                 endingTime: timeStr,
@@ -428,7 +551,7 @@ wss.on('connection', (ws) => {
                 notes: `Gained room custody for Laboratory SmartLock #1 (Transferred from ${relinquishing})`,
               };
 
-              history = [gainRecord, ...history];
+              history = deduplicateHistory([gainRecord, relinqRecord, ...history]);
 
               // Admin notification
               const transferNotif = {
@@ -436,7 +559,7 @@ wss.on('connection', (ws) => {
                 type: 'lock_state_change',
                 action: 'unlocked',
                 username: gaining,
-                userRole: 'user',
+                userRole: (String(gaining).toLowerCase() === 'administrator' || gainUser?.type === 'admin') ? 'admin' : 'user',
                 doorName: 'Laboratory SmartLock #1',
                 timestamp: `${timeStr}, ${dateStr}`,
                 timestampMs: Date.now(),
@@ -602,11 +725,10 @@ wss.on('connection', (ws) => {
               history = [];
             } else if (action === 'seed') {
               history = Array.isArray(payload) && payload.length > 0 ? payload : generateMonthHistory();
-            } else if (action === 'add' || action === 'create') {
-              if (payload && payload.id) {
-                if (!history.some((h) => h.id === payload.id)) {
-                  history = [payload, ...history];
-                }
+            } else if (action === 'add' || action === 'create' || action === 'add_multiple') {
+              const incoming = Array.isArray(payload) ? payload : (payload ? [payload] : []);
+              if (incoming.length > 0) {
+                history = deduplicateHistory([...incoming, ...history]);
               }
             }
           }
@@ -719,6 +841,109 @@ app.post('/api/profiles/avatar', (req, res) => {
   // Broadcast to all WebSocket connected devices immediately
   broadcast(buildSyncPayload());
   res.json({ success: true, avatarIndex: finalIdx, avatarUrl: String(finalIdx) });
+});
+
+app.get('/api/history', (_req, res) => {
+  res.json(history);
+});
+
+app.post('/api/history', (req, res) => {
+  const payload = req.body;
+  const incoming = Array.isArray(payload) ? payload : (payload ? [payload] : []);
+  if (incoming.length > 0) {
+    history = deduplicateHistory([...incoming, ...history]);
+    broadcast(buildSyncPayload());
+  }
+  res.json({ success: true, historyCount: history.length });
+});
+
+app.post('/api/room-transfers/respond', (req, res) => {
+  const { transferId, accept, fromUsername, toUsername, requestType, relinquishing, gaining, gainRecord, relinqRecord } = req.body;
+  const { timeStr, dateStr } = formatDateTime();
+
+  if (accept) {
+    const found = roomTransfers.find((t) => t.id === transferId);
+    const reqType = found?.requestType || requestType || 'transfer';
+    const isAccessReq = reqType === 'request';
+    const relinqUserStr =
+      relinquishing ||
+      (isAccessReq ? found?.toUsername || toUsername : found?.fromUsername || fromUsername) ||
+      'Administrator';
+    const gainUserStr =
+      gaining ||
+      (isAccessReq ? found?.fromUsername || fromUsername : found?.toUsername || toUsername) ||
+      'User';
+
+    if (found) {
+      roomTransfers = roomTransfers
+        .map((t) =>
+          t.id === transferId
+            ? { ...t, status: 'accepted', resolvedAt: `${timeStr}, ${dateStr}` }
+            : t
+        )
+        .filter((t) => t.id === transferId || t.status !== 'pending');
+    } else {
+      roomTransfers = [
+        {
+          id: transferId || `transfer-${Date.now()}`,
+          requestType: reqType,
+          fromUsername: fromUsername || relinqUserStr,
+          toUsername: toUsername || gainUserStr,
+          doorName: 'Laboratory SmartLock #1',
+          timestamp: `${timeStr}, ${dateStr}`,
+          timestampMs: Date.now(),
+          status: 'accepted',
+          resolvedAt: `${timeStr}, ${dateStr}`,
+        },
+        ...roomTransfers.filter((t) => t.status !== 'pending'),
+      ];
+    }
+
+    smartLockState.activeRoomHolder = gainUserStr;
+    smartLockState.version += 1;
+    smartLockState.lastUpdated = Date.now();
+
+    const relinqUserObj = profiles.find((p) => p.username.toLowerCase() === String(relinqUserStr).toLowerCase());
+    const gainUserObj = profiles.find((p) => p.username.toLowerCase() === String(gainUserStr).toLowerCase());
+
+    const finalRelinq = relinqRecord || {
+      id: `hist-relinq-${transferId || Date.now()}`,
+      username: relinqUserStr,
+      permission: relinqUserObj?.permission || (String(relinqUserStr).toLowerCase() === 'administrator' ? 'Admin Privilege' : 'Standard User Access'),
+      userType: (String(relinqUserStr).toLowerCase() === 'administrator' || relinqUserObj?.type === 'admin') ? 'admin' : 'user',
+      locked: false,
+      startingTime: timeStr,
+      endingTime: timeStr,
+      date: dateStr,
+      timestamp: Date.now() - 1,
+      notes: `Relinquished room custody for Laboratory SmartLock #1 (Transferred to ${gainUserStr})`,
+    };
+
+    const finalGain = gainRecord || {
+      id: `hist-gain-${transferId || Date.now()}`,
+      username: gainUserStr,
+      permission: gainUserObj?.permission || (String(gainUserStr).toLowerCase() === 'administrator' ? 'Admin Privilege' : 'Standard User Access'),
+      userType: (String(gainUserStr).toLowerCase() === 'administrator' || gainUserObj?.type === 'admin') ? 'admin' : 'user',
+      locked: false,
+      startingTime: timeStr,
+      endingTime: timeStr,
+      date: dateStr,
+      timestamp: Date.now(),
+      notes: `Gained room custody for Laboratory SmartLock #1 (Transferred from ${relinqUserStr})`,
+    };
+
+    history = deduplicateHistory([finalGain, finalRelinq, ...history]);
+    broadcast(buildSyncPayload());
+    res.json({ success: true, activeRoomHolder: gainUserStr, historyCount: history.length });
+  } else {
+    roomTransfers = roomTransfers.map((t) =>
+      t.id === transferId
+        ? { ...t, status: 'declined', resolvedAt: `${timeStr}, ${dateStr}` }
+        : t
+    );
+    broadcast(buildSyncPayload());
+    res.json({ success: true, status: 'declined' });
+  }
 });
 
 // Mount Vite in dev mode or serve static files in prod

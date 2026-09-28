@@ -3,17 +3,12 @@ import { useApp } from '../context/AppContext';
 import {
   KeyRound,
   X,
-  UserCheck,
   CheckCircle2,
-  Clock,
-  Shield,
-  ArrowRightLeft,
   AlertCircle,
-  DoorOpen,
   Send,
 } from 'lucide-react';
-import user_png from '../assets/images/user.png';
 import { getAvatarByIndex } from '../data/avatarIcons';
+import user_png from '../assets/images/user.png';
 
 interface RequestAccessModalProps {
   isOpen: boolean;
@@ -26,7 +21,7 @@ export const RequestAccessModal: React.FC<RequestAccessModalProps> = ({
   onClose,
   sessionHolderName,
 }) => {
-  const { currentUser, profiles, requestRoomAccess } = useApp();
+  const { profiles, requestRoomAccess } = useApp();
   const [notes, setNotes] = useState<string>('');
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -63,31 +58,32 @@ export const RequestAccessModal: React.FC<RequestAccessModalProps> = ({
   const presetReasons = [
     'Finished Class Early',
     'Cancelled Class',
+    'Equipment Maintenance',
   ];
 
   return (
     <div
       id="request-access-modal-backdrop"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-fade-in"
       onClick={(e) => {
         if (e.target === e.currentTarget) handleClose();
       }}
     >
       <div
         id="request-access-modal"
-        className="w-full max-w-md bg-gradient-to-b from-[#111827] to-[#0a0f1d] border border-cyan-500/40 rounded-3xl p-5 shadow-[0_0_50px_rgba(6,182,212,0.25)] text-white relative overflow-hidden"
+        className="w-full max-w-lg bg-gradient-to-b from-[#111827] via-[#0d1322] to-[#0a0f1d] border-2 border-cyan-500/40 rounded-3xl p-4 sm:p-5 shadow-[0_0_50px_rgba(6,182,212,0.25)] text-white relative overflow-hidden max-h-[92vh] flex flex-col"
       >
-
         {/* Modal Top Nav */}
-        <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div className="flex items-center justify-between pb-3.5 border-b border-slate-800">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-2xl bg-cyan-500/20 border border-cyan-500/40 text-cyan-400 shadow-md">
+            <div className="w-11 h-11 rounded-2xl bg-cyan-500/20 border border-cyan-500/40 text-cyan-400 shadow-md flex items-center justify-center shrink-0">
               <KeyRound className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white tracking-wide mt-0.5">
+              <h3 className="text-base sm:text-lg font-bold text-white tracking-wide">
                 Request Room Access
               </h3>
+              <p className="text-xs sm:text-sm text-slate-400">Ask current session holder for control</p>
             </div>
           </div>
 
@@ -95,121 +91,103 @@ export const RequestAccessModal: React.FC<RequestAccessModalProps> = ({
             id="close-request-access-modal-btn"
             type="button"
             onClick={handleClose}
-            className="p-1.5 rounded-xl bg-slate-800/60 hover:bg-slate-700 text-slate-400 hover:text-white transition cursor-pointer"
+            className="w-10 h-10 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition flex items-center justify-center cursor-pointer"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
         {isSuccess ? (
-          <div className="py-8 text-center space-y-3 animate-fade-in">
-            <div className="w-14 h-14 mx-auto rounded-full bg-cyan-500/20 border-2 border-cyan-400 flex items-center justify-center text-cyan-300 shadow-[0_0_25px_rgba(6,182,212,0.4)]">
-              <CheckCircle2 className="w-8 h-8" />
+          <div className="py-10 text-center space-y-3.5 animate-fade-in">
+            <div className="w-16 h-16 mx-auto rounded-full bg-cyan-500/20 border-2 border-cyan-400 flex items-center justify-center text-cyan-300 shadow-[0_0_25px_rgba(6,182,212,0.4)]">
+              <CheckCircle2 className="w-9 h-9" />
             </div>
-            <h4 className="text-base font-bold text-white">Access Request Sent!</h4>
+            <h4 className="text-lg sm:text-xl font-bold text-white">Access Request Sent!</h4>
+            <p className="text-xs sm:text-sm text-slate-300 max-w-xs mx-auto">
+              A notification banner has been dispatched to {sessionHolderName}.
+            </p>
           </div>
         ) : (
-          <form onSubmit={handleSendRequest} className="space-y-4 pt-3">
+          <form onSubmit={handleSendRequest} className="space-y-4 pt-3 flex-1 overflow-y-auto no-scrollbar">
             {errorMessage && (
-              <div className="p-3 rounded-xl bg-red-950/60 border border-red-500/50 text-red-300 text-xs flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+              <div className="p-3.5 rounded-2xl bg-red-950/60 border border-red-500/50 text-red-300 text-xs sm:text-sm flex items-center gap-2.5">
+                <AlertCircle className="w-5 h-5 shrink-0 text-red-400" />
                 <span>{errorMessage}</span>
               </div>
             )}
 
-            <div className="p-3.5 rounded-2xl bg-[#090d16] border border-slate-800 space-y-2">
+            <div className="p-4 rounded-2xl bg-[#090d16] border border-slate-800 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider">
+                <span className="text-xs sm:text-sm font-mono text-slate-400 uppercase tracking-wider font-semibold">
                   Current Session Holder
                 </span>
               </div>
 
-              <div className="flex items-center gap-3 pt-1">
-                <div className="relative">
-                  <img
-                    src={getAvatarByIndex(holderProfile?.avatarIndex !== undefined ? holderProfile.avatarIndex : holderProfile?.avatarUrl)}
-                    alt={sessionHolderName}
-                    className="w-11 h-11 rounded-full object-contain p-1 bg-slate-900 border-2 border-cyan-500/40 shadow-sm"
-                  />
-                  <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-400 border-2 border-[#090d16]" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-white truncate">
-                      {sessionHolderName}
-                    </span>
-                    <span
-                      className={`text-[9px] font-mono px-1.5 py-0.2 rounded border uppercase font-bold ${
-                        holderProfile?.type === 'admin'
-                          ? 'bg-red-500/20 text-red-300 border-red-500/30'
-                          : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                      }`}
-                    >
-                      {holderProfile?.type || 'User'}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-400 font-mono truncate">
-                    {holderProfile?.permission || 'Active Access Holder'}
+              <div className="flex items-center gap-3.5 pt-1">
+                <img
+                  src={getAvatarByIndex(holderProfile?.avatarIndex !== undefined ? holderProfile.avatarIndex : holderProfile?.avatarUrl)}
+                  alt={sessionHolderName}
+                  onError={(e) => {
+                    e.currentTarget.onerror = null;
+                    e.currentTarget.src = user_png;
+                  }}
+                  className="w-12 h-12 rounded-full object-contain p-0.5 bg-slate-900 border-2 border-cyan-400/80 shadow"
+                />
+                <div>
+                  <h4 className="text-base sm:text-lg font-bold text-white">{sessionHolderName}</h4>
+                  <p className="text-xs sm:text-sm text-slate-400 font-mono">
+                    {holderProfile?.permission || 'Active Room Controller'}
                   </p>
                 </div>
               </div>
             </div>
 
-            {/* Request Reason / Note Input */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label
-                  htmlFor="request-access-notes-input"
-                  className="text-xs font-semibold text-slate-300"
-                >
-                  Reason for Transferring Access (Optional)
-                </label>
-              </div>
+            {/* Quick preset reason pills */}
+            <div className="space-y-2">
+              <label className="text-xs sm:text-sm font-mono text-slate-300 uppercase tracking-wider block font-semibold">
+                Reason / Note for Handover:
+              </label>
 
-              <textarea
-                id="request-access-notes-input"
-                rows={2}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="e.g. Finished laboratory class early today..."
-                className="w-full bg-[#090d16] border border-slate-800 focus:border-cyan-500 text-white p-2.5 rounded-xl text-xs focus:outline-none placeholder:text-slate-500 transition-colors resize-none"
-              />
-
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {presetReasons.map((reason) => (
+              <div className="flex flex-wrap gap-2">
+                {presetReasons.map((preset) => (
                   <button
-                    key={reason}
+                    key={preset}
                     type="button"
-                    onClick={() => setNotes(reason)}
-                    className={`text-[10px] font-mono px-2 py-1 rounded-lg border transition-all cursor-pointer ${
-                      notes === reason
-                        ? 'bg-cyan-500/30 text-cyan-200 border-cyan-400'
-                        : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200 hover:border-slate-700'
+                    onClick={() => setNotes(preset)}
+                    className={`text-xs sm:text-sm font-mono px-3 py-1.5 rounded-xl border transition-all cursor-pointer min-h-[36px] ${
+                      notes === preset
+                        ? 'bg-cyan-500/25 text-cyan-200 border-cyan-400 font-bold shadow-sm'
+                        : 'bg-[#0f172a] text-slate-300 border-slate-700 hover:border-slate-600'
                     }`}
                   >
-                    {reason}
+                    {preset}
                   </button>
                 ))}
               </div>
+
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={2}
+                placeholder="Write specific reason or instruction for requesting custody..."
+                className="w-full bg-[#090d16] border border-slate-800 focus:border-cyan-500 rounded-2xl p-3.5 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none transition-colors resize-none mt-1"
+              />
             </div>
 
-            {/* Buttons */}
-            <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
+            <div className="grid grid-cols-2 gap-3 pt-2">
               <button
-                id="cancel-request-access-btn"
                 type="button"
                 onClick={handleClose}
-                className="flex-1 py-2.5 rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-300 text-xs font-semibold transition cursor-pointer"
+                className="py-3 rounded-xl border border-slate-700 text-slate-300 hover:text-white text-xs sm:text-sm font-bold transition cursor-pointer min-h-[44px]"
               >
                 Cancel
               </button>
 
               <button
-                id="submit-request-access-btn"
                 type="submit"
-                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 text-xs font-black transition-all shadow-[0_0_15px_rgba(6,182,212,0.3)] flex items-center justify-center gap-1.5 cursor-pointer"
+                className="py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black text-xs sm:text-sm shadow-[0_0_20px_rgba(6,182,212,0.3)] transition-all flex items-center justify-center gap-2 cursor-pointer min-h-[44px]"
               >
-                <Send className="w-3.5 h-3.5" />
+                <Send className="w-4 h-4" />
                 <span>Send Request</span>
               </button>
             </div>

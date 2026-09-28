@@ -897,7 +897,7 @@ void loadHistoryFromFS() {
   }
 }
 
-void addHistoryRecord(String username, String userType, String permission, bool locked, String notes, bool isEmergency = false, String emergencyReason = "") {
+void addHistoryRecord(String username, String userType, String permission, bool locked, String notes, bool isEmergency = false, String emergencyReason = "", String timeStr = "", String dateStr = "", unsigned long epochTimestamp = 0) {
   if (historyCount < MAX_HISTORY) {
     historyCount++;
   }
@@ -912,10 +912,10 @@ void addHistoryRecord(String username, String userType, String permission, bool 
     permission.length() > 0 ? permission : (userType == "admin" ? "Admin Privilege" : "Standard User Access"),
     userType.length() > 0 ? userType : "user",
     locked,
-    "Recent",
-    "Just now",
-    "Today",
-    millis(),
+    timeStr.length() > 0 ? timeStr : "12:00 PM",
+    timeStr.length() > 0 ? timeStr : "12:00 PM",
+    dateStr.length() > 0 ? dateStr : "Sep 27, 2026",
+    epochTimestamp > 1000000000 ? epochTimestamp : 0,
     notes,
     isEmergency,
     emergencyReason
@@ -961,9 +961,12 @@ void loadStateFromFS() {
 // -------------------------------------------------------------
 // Helper: Build Full SYNC_REPLY JSON
 // Sends current state, user credentials, room custody, and requests
+// Memory-optimized with String pre-allocation to prevent heap fragmentation
 // -------------------------------------------------------------
 String buildSyncJson() {
-  String json = "{";
+  String json;
+  json.reserve(2560); // Pre-allocate buffer to prevent repeated heap fragmentation on ESP8266
+  json = "{";
   json += "\"type\":\"SYNC_REPLY\",";
   
   // State block
@@ -1126,6 +1129,24 @@ String buildSyncJson() {
   return json;
 }
 
+// Lightweight progress packet during motor movement to conserve RAM & TCP buffers
+String buildProgressJson() {
+  String json;
+  json.reserve(256);
+  json = "{\"type\":\"LOCK_PROGRESS\",\"changing\":true,\"lockOperation\":\"";
+  json += lockOperation;
+  json += "\",\"lockProgress\":";
+  json += String(lockProgress);
+  json += ",\"remainingLockTime\":";
+  json += String(remainingTime);
+  json += ",\"locked\":";
+  json += String(isLocked ? "true" : "false");
+  json += ",\"timestamp\":";
+  json += String(millis());
+  json += "}";
+  return json;
+}
+
 // -------------------------------------------------------------
 // Lock Hardware Transition
 // -------------------------------------------------------------
@@ -1215,18 +1236,28 @@ void handleRoomTransfer(String msg) {
 
     if (accept) {
       pendingStatus = "accepted";
-      String relinquishing = (pendingType == "request" ? pendingToUser : pendingFromUser);
-      if (pendingType == "request") {
-        activeRoomHolder = pendingFromUser;
-      } else {
-        activeRoomHolder = pendingToUser;
+      String relinquishing = extractJsonString(msg, "relinquishing");
+      String gaining = extractJsonString(msg, "gaining");
+      if (relinquishing.length() == 0) {
+        relinquishing = (pendingType == "request" ? pendingToUser : pendingFromUser);
       }
+      if (gaining.length() == 0) {
+        gaining = (pendingType == "request" ? pendingFromUser : pendingToUser);
+      }
+      if (relinquishing.length() == 0) relinquishing = "Administrator";
+      if (gaining.length() == 0) gaining = "User123test";
+
+      activeRoomHolder = gaining;
       saveStateToFS();
 
-      // Record custody transfer in access log
-      String gainingRole = (activeRoomHolder.equalsIgnoreCase("Administrator") ? "admin" : "user");
-      String gainingPerm = (activeRoomHolder.equalsIgnoreCase("Administrator") ? "Admin Privilege" : "Standard User Access");
-      addHistoryRecord(activeRoomHolder, gainingRole, gainingPerm, false, "Gained room custody for Laboratory SmartLock #1 (Transferred from " + relinquishing + ")");
+      // Record custody transfer in access log for both parties
+      String gainRole = (gaining.equalsIgnoreCase("Administrator") ? "admin" : "user");
+      String gainPerm = (gaining.equalsIgnoreCase("Administrator") ? "Admin Privilege" : "Standard User Access");
+      String relinqRole = (relinquishing.equalsIgnoreCase("Administrator") ? "admin" : "user");
+      String relinqPerm = (relinquishing.equalsIgnoreCase("Administrator") ? "Admin Privilege" : "Standard User Access");
+
+      addHistoryRecord(relinquishing, relinqRole, relinqPerm, false, "Relinquished room custody for Laboratory SmartLock #1 (Transferred to " + gaining + ")");
+      addHistoryRecord(gaining, gainRole, gainPerm, false, "Gained room custody for Laboratory SmartLock #1 (Transferred from " + relinquishing + ")");
 
       lcd.setCursor(0, 0);
       lcd.print("ACCESS GRANTED: ");
@@ -1579,7 +1610,7 @@ void setup() {
   server.addHandler(&ws);
   server.addHandler(&events);
 
-  // Serve LittleFS web files
+  // Serve LittleFS web files with client-side caching to prevent repeated disk read blocking
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
     if (LittleFS.exists("/index.html.gz")) {
       request->send(LittleFS, "/index.html", "text/html");
@@ -1587,7 +1618,7 @@ void setup() {
       request->send(200, "text/plain", "SmartLock ESP8266 WebSocket Server Ready at ws://" + myIP.toString() + "/ws");
     }
   });
-  server.serveStatic("/", LittleFS, "/");
+  server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html").setCacheControl("max-age=86400");
 
   server.begin();
 
@@ -1655,7 +1686,9 @@ void loop() {
           lcd.print(line.substring(0, 16));
 
           // Broadcast state completion to all connected clients
-          ws.textAll(buildSyncJson());
+          if (ws.count() > 0) {
+            ws.textAll(buildSyncJson());
+          }
         }
       } else {
         // LOCKING transition
@@ -1696,16 +1729,20 @@ void loop() {
           lcd.print("LOCKED          ");
 
           // Broadcast state completion to all connected clients
-          ws.textAll(buildSyncJson());
+          if (ws.count() > 0) {
+            ws.textAll(buildSyncJson());
+          }
         }
       }
 
       if (changing) {
         lockCounter += 1;
         sprintf(lockCounterChar, "%d", remainingTime);
-        // Broadcast both raw countdown and full sync state
-        ws.textAll(lockCounterChar);
-        ws.textAll(buildSyncJson());
+        // Broadcast lightweight progress packet to conserve ESP8266 RAM and avoid TCP socket congestion
+        if (ws.count() > 0) {
+          ws.textAll(lockCounterChar);
+          ws.textAll(buildProgressJson());
+        }
       }
     } else {
       // Idle state LCD refresh (every 3 seconds)
@@ -1733,4 +1770,7 @@ void loop() {
 
   // Clean up any stale WebSocket clients
   ws.cleanupClients();
+
+  // Yield execution to background Wi-Fi and TCP stack
+  yield();
 }
