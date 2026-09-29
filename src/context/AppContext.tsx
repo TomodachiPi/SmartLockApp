@@ -305,15 +305,9 @@ const defaultHistory: HistoryRecord[] = generateMonthHistory();
 
 export function normalizeHistoryRecord(item: HistoryRecord): HistoryRecord {
   if (!item) return item;
-  const now = new Date();
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const todayStr = `${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
-  const hours = now.getHours();
-  const minutes = now.getMinutes();
-  const nowTimeStr = `${hours % 12 || 12}:${String(minutes).padStart(2, '0')} ${hours >= 12 ? 'PM' : 'AM'}`;
 
   // 1. Calculate proper millisecond timestamp (year 2024+)
-  let ts: number | undefined = item.timestamp;
+  let ts: number | undefined = typeof item.timestamp === 'string' ? parseFloat(item.timestamp) : item.timestamp;
   if (typeof ts === 'number' && !isNaN(ts)) {
     if (ts >= 1000000000000) {
       // valid ms
@@ -327,13 +321,38 @@ export function normalizeHistoryRecord(item: HistoryRecord): HistoryRecord {
     ts = undefined;
   }
 
-  // 2. Fix date if placeholder
+  // 2. If valid timestamp exists, derive accurate local time and date in user's timezone
+  if (ts && ts >= 1000000000000) {
+    const d = new Date(ts);
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const localDateStr = `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+    const hours = d.getHours();
+    const minutes = d.getMinutes();
+    const localTimeStr = `${hours % 12 || 12}:${String(minutes).padStart(2, '0')} ${hours >= 12 ? 'PM' : 'AM'}`;
+
+    return {
+      ...item,
+      date: localDateStr,
+      startingTime: localTimeStr,
+      endingTime: localTimeStr,
+      timestamp: ts,
+    };
+  }
+
+  const now = new Date();
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const todayStr = `${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
+  const hours = now.getHours();
+  const minutes = now.getMinutes();
+  const nowTimeStr = `${hours % 12 || 12}:${String(minutes).padStart(2, '0')} ${hours >= 12 ? 'PM' : 'AM'}`;
+
+  // Fix date if placeholder
   let date = (item.date || '').trim();
   if (!date || date.toLowerCase() === 'today' || date.toLowerCase() === 'yesterday' || date.toLowerCase().includes('undefined')) {
     date = todayStr;
   }
 
-  // 3. Fix startingTime & endingTime if placeholder
+  // Fix startingTime & endingTime if placeholder
   let startingTime = (item.startingTime || '').trim();
   if (!startingTime || startingTime.toLowerCase().includes('recent') || startingTime.toLowerCase().includes('just now') || startingTime.toLowerCase().includes('undefined')) {
     startingTime = nowTimeStr;
@@ -343,10 +362,8 @@ export function normalizeHistoryRecord(item: HistoryRecord): HistoryRecord {
     endingTime = nowTimeStr;
   }
 
-  if (!ts) {
-    const parsed = Date.parse(`${date} ${startingTime}`);
-    ts = !isNaN(parsed) && parsed > 1000000000000 ? parsed : Date.now();
-  }
+  const parsed = Date.parse(`${date} ${startingTime}`);
+  ts = !isNaN(parsed) && parsed > 1000000000000 ? parsed : Date.now();
 
   return {
     ...item,
@@ -1116,9 +1133,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (parsed.remainingLockTime !== undefined) setRemainingLockTime(parsed.remainingLockTime);
       if (parsed.locked !== undefined) setLocked(parsed.locked);
       if (parsed.lockOperation) setLockOperation(parsed.lockOperation);
-    } else if (parsed.type === 'ROOM_TRANSFER_UPDATE') {
+    } else if (parsed.type === 'ROOM_TRANSFER_UPDATE' || parsed.type === 'ROOM_TRANSFER_ACTION') {
       if (Array.isArray(parsed.roomTransfers)) setRoomTransfers(parsed.roomTransfers);
       if (parsed.activeRoomHolder !== undefined) setActiveRoomHolder(parsed.activeRoomHolder);
+      if (parsed.subType === 'respond' && parsed.accept) {
+        if (parsed.gaining || parsed.toUsername) setActiveRoomHolder(parsed.gaining || parsed.toUsername);
+        if (parsed.gainRecord || parsed.relinqRecord) {
+          const recs = [parsed.gainRecord, parsed.relinqRecord].filter(Boolean);
+          setHistory((prev) => deduplicateHistory([...recs, ...prev]));
+        }
+      }
       if (Array.isArray(parsed.history)) {
         setHistory((prev) => deduplicateHistory([...parsed.history, ...prev]));
       }
@@ -1204,7 +1228,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .catch(() => {});
   }, [handleIncomingWsMessage]);
 
-  // PERIODIC SYNC POLLING: Send WebSocket POLL_REQUEST every 5 seconds to sync schedules and presence
+  // PERIODIC SYNC POLLING: Send WebSocket POLL_REQUEST every 2 seconds to sync schedules, presence, and activity log
   useEffect(() => {
     const pollInterval = setInterval(() => {
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -1216,7 +1240,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         };
         try {
           wsRef.current.send(JSON.stringify(pollMsg));
-          addWsLog('send', `[Periodic 5s Poll] Sent POLL_REQUEST to ESP8266/Server (${currentUserRef.current?.username || 'Guest'})`);
+          addWsLog('send', `[Periodic 2s Poll] Sent POLL_REQUEST to ESP8266/Server (${currentUserRef.current?.username || 'Guest'})`);
         } catch (e: any) {
           addWsLog('system', `Failed to send periodic poll: ${e.message}`);
         }
@@ -1231,7 +1255,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           })
           .catch(() => {});
       }
-    }, 5000); // 5 seconds interval
+    }, 2000); // 2 seconds interval for fast multi-user sync
 
     return () => clearInterval(pollInterval);
   }, [addWsLog, handleIncomingWsMessage]);
@@ -1396,6 +1420,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       action: 'toggle',
       username: actingUser,
       userRole: actingRole,
+      startingTime: timeStr,
+      endingTime: timeStr,
+      date: dateStr,
       timestamp: Date.now(),
     };
     sendWsJson(lockActionMsg);
@@ -1506,6 +1533,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       reason,
       notes,
       username: actingUser,
+      userRole: actingRole,
+      startingTime: timeStr,
+      endingTime: timeStr,
+      date: dateStr,
       timestamp: Date.now(),
     };
     sendWsJson(emgActionMsg);

@@ -5,6 +5,8 @@ import { CheckCircle, ShieldAlert } from 'lucide-react';
 export const EmergencyBanner: React.FC = () => {
   const { emergencyAlerts, resolveEmergency, currentUser } = useApp();
 
+  if (currentUser?.type !== 'admin') return null;
+
   const activeAlerts = emergencyAlerts.filter((a) => !a.resolved);
 
   if (activeAlerts.length === 0) return null;

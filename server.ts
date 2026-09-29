@@ -309,34 +309,6 @@ function startLockTransition(targetLocked: boolean, actingUser = 'Administrator'
         smartLockState.activeRoomHolder = actingUser;
       }
 
-      const histRecord: any = isEmergency ? {
-        id: `hist-emg-${Date.now()}`,
-        username: actingUser,
-        permission: 'EMERGENCY OVERRIDE',
-        userType: role,
-        locked: false,
-        startingTime: timeStr,
-        endingTime: timeStr,
-        date: dateStr,
-        timestamp: Date.now(),
-        isEmergencyOverride: true,
-        emergencyReason: emergencyReason || 'Emergency Evacuation',
-        notes: `EMERGENCY OVERRIDE UNLOCKED: ${emergencyReason || 'Emergency Evacuation'}`,
-      } : {
-        id: `hist-${Date.now()}`,
-        username: actingUser,
-        permission: role === 'admin' ? 'Admin Privilege' : 'Standard User Access',
-        userType: role,
-        locked: targetLocked,
-        startingTime: timeStr,
-        endingTime: timeStr,
-        date: dateStr,
-        timestamp: Date.now(),
-        notes: targetLocked ? 'Door locked securely via WebSocket' : 'Door opened with authorized credential via WebSocket',
-      };
-
-      history = deduplicateHistory([histRecord, ...history]);
-
       const notif: any = {
         id: `notif-${Date.now()}`,
         type: 'lock_state_change',
@@ -447,7 +419,39 @@ wss.on('connection', (ws) => {
             ? !smartLockState.locked
             : parsed.action === 'lock';
           const user = parsed.username || 'User';
-          const role = parsed.userRole || 'user';
+          const role = parsed.userRole || (user.toLowerCase() === 'administrator' ? 'admin' : 'user');
+          const { timeStr, dateStr } = formatDateTime();
+
+          const histRecord: any = parsed.emergency ? {
+            id: `hist-emg-${Date.now()}`,
+            username: user,
+            permission: 'EMERGENCY OVERRIDE',
+            userType: role,
+            locked: false,
+            startingTime: parsed.startingTime || timeStr,
+            endingTime: parsed.endingTime || timeStr,
+            date: parsed.date || dateStr,
+            timestamp: parsed.timestamp || Date.now(),
+            isEmergencyOverride: true,
+            emergencyReason: parsed.reason || 'Emergency Evacuation',
+            notes: `EMERGENCY OVERRIDE UNLOCKED: ${parsed.reason || 'Emergency Evacuation'}`,
+          } : {
+            id: `hist-${Date.now()}`,
+            username: user,
+            permission: role === 'admin' ? 'Admin Privilege' : 'Standard User Access',
+            userType: role,
+            locked: target,
+            startingTime: parsed.startingTime || timeStr,
+            endingTime: parsed.endingTime || timeStr,
+            date: parsed.date || dateStr,
+            timestamp: parsed.timestamp || Date.now(),
+            notes: target ? 'Door locked securely via WebSocket' : 'Door opened with authorized credential via WebSocket',
+          };
+
+          // Record history immediately and broadcast to all connected users
+          history = deduplicateHistory([histRecord, ...history]);
+          broadcast(buildSyncPayload());
+
           startLockTransition(target, user, role, parsed.emergency, parsed.reason);
           break;
         }
@@ -524,17 +528,17 @@ wss.on('connection', (ws) => {
               const relinqUser = profiles.find((p) => p.username.toLowerCase() === String(relinquishing).toLowerCase());
               const gainUser = profiles.find((p) => p.username.toLowerCase() === String(gaining).toLowerCase());
 
-              // Add history records for both parties
+              // Add history records for both parties with accurate timestamps
               const relinqRecord = parsed.relinqRecord || {
                 id: `hist-relinq-${transferId || Date.now()}`,
                 username: relinquishing,
                 permission: relinqUser?.permission || (String(relinquishing).toLowerCase() === 'administrator' ? 'Admin Privilege' : 'Standard User Access'),
                 userType: (String(relinquishing).toLowerCase() === 'administrator' || relinqUser?.type === 'admin') ? 'admin' : 'user',
                 locked: false,
-                startingTime: timeStr,
-                endingTime: timeStr,
-                date: dateStr,
-                timestamp: Date.now() - 1,
+                startingTime: parsed.startingTime || timeStr,
+                endingTime: parsed.endingTime || timeStr,
+                date: parsed.date || dateStr,
+                timestamp: parsed.timestamp ? parsed.timestamp - 1 : Date.now() - 1,
                 notes: `Relinquished room custody for Laboratory SmartLock #1 (Transferred to ${gaining})`,
               };
 
@@ -544,10 +548,10 @@ wss.on('connection', (ws) => {
                 permission: gainUser?.permission || (String(gaining).toLowerCase() === 'administrator' ? 'Admin Privilege' : 'Standard User Access'),
                 userType: (String(gaining).toLowerCase() === 'administrator' || gainUser?.type === 'admin') ? 'admin' : 'user',
                 locked: false,
-                startingTime: timeStr,
-                endingTime: timeStr,
-                date: dateStr,
-                timestamp: Date.now(),
+                startingTime: parsed.startingTime || timeStr,
+                endingTime: parsed.endingTime || timeStr,
+                date: parsed.date || dateStr,
+                timestamp: parsed.timestamp || Date.now(),
                 notes: `Gained room custody for Laboratory SmartLock #1 (Transferred from ${relinquishing})`,
               };
 
@@ -584,18 +588,39 @@ wss.on('connection', (ws) => {
         // 4. Emergency Action
         case 'EMERGENCY_ACTION': {
           const { timeStr, dateStr } = formatDateTime();
+          const user = parsed.username || 'User';
+          const role = parsed.userRole || (user.toLowerCase() === 'administrator' ? 'admin' : 'user');
+          const reason = parsed.reason || 'Emergency Evacuation';
           const newAlert = {
             id: `alert-${Date.now()}`,
-            username: parsed.username || 'User',
-            userRole: 'user',
+            username: user,
+            userRole: role,
             timestamp: `${timeStr}, ${dateStr}`,
             timestampMs: Date.now(),
-            reason: parsed.reason || 'Emergency Evacuation',
+            reason,
             notes: parsed.notes,
             resolved: false,
           };
           emergencyAlerts = [newAlert, ...emergencyAlerts];
-          startLockTransition(false, parsed.username || 'User', 'user', true, parsed.reason);
+
+          const histRecord: any = {
+            id: `hist-emg-${Date.now()}`,
+            username: user,
+            permission: 'EMERGENCY OVERRIDE',
+            userType: role,
+            locked: false,
+            startingTime: parsed.startingTime || timeStr,
+            endingTime: parsed.endingTime || timeStr,
+            date: parsed.date || dateStr,
+            timestamp: parsed.timestamp || Date.now(),
+            isEmergencyOverride: true,
+            emergencyReason: reason,
+            notes: `EMERGENCY OVERRIDE UNLOCKED: ${reason}${parsed.notes ? ` - ${parsed.notes}` : ''}`,
+          };
+          history = deduplicateHistory([histRecord, ...history]);
+          broadcast(buildSyncPayload());
+
+          startLockTransition(false, user, role, true, reason);
           break;
         }
 
@@ -912,10 +937,10 @@ app.post('/api/room-transfers/respond', (req, res) => {
       permission: relinqUserObj?.permission || (String(relinqUserStr).toLowerCase() === 'administrator' ? 'Admin Privilege' : 'Standard User Access'),
       userType: (String(relinqUserStr).toLowerCase() === 'administrator' || relinqUserObj?.type === 'admin') ? 'admin' : 'user',
       locked: false,
-      startingTime: timeStr,
-      endingTime: timeStr,
-      date: dateStr,
-      timestamp: Date.now() - 1,
+      startingTime: req.body.startingTime || timeStr,
+      endingTime: req.body.endingTime || timeStr,
+      date: req.body.date || dateStr,
+      timestamp: req.body.timestamp ? req.body.timestamp - 1 : Date.now() - 1,
       notes: `Relinquished room custody for Laboratory SmartLock #1 (Transferred to ${gainUserStr})`,
     };
 
@@ -925,10 +950,10 @@ app.post('/api/room-transfers/respond', (req, res) => {
       permission: gainUserObj?.permission || (String(gainUserStr).toLowerCase() === 'administrator' ? 'Admin Privilege' : 'Standard User Access'),
       userType: (String(gainUserStr).toLowerCase() === 'administrator' || gainUserObj?.type === 'admin') ? 'admin' : 'user',
       locked: false,
-      startingTime: timeStr,
-      endingTime: timeStr,
-      date: dateStr,
-      timestamp: Date.now(),
+      startingTime: req.body.startingTime || timeStr,
+      endingTime: req.body.endingTime || timeStr,
+      date: req.body.date || dateStr,
+      timestamp: req.body.timestamp || Date.now(),
       notes: `Gained room custody for Laboratory SmartLock #1 (Transferred from ${relinqUserStr})`,
     };
 

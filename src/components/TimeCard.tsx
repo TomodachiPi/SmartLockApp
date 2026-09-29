@@ -13,7 +13,7 @@ interface TimeCardProps {
   timestamp?: number;
 }
 
-function getValidEpoch(timestamp?: number, rawDate?: string, rawTime?: string): number {
+function getValidEpoch(timestamp?: number, rawDate?: string, rawTime?: string): number | null {
   if (timestamp && typeof timestamp === 'number' && !isNaN(timestamp)) {
     // 13-digit millisecond timestamp (e.g. 1727431200000 for year 2024+)
     if (timestamp >= 1000000000000) return timestamp;
@@ -26,13 +26,20 @@ function getValidEpoch(timestamp?: number, rawDate?: string, rawTime?: string): 
     const parsed = Date.parse(`${rawDate.trim()} ${timeToParse}`);
     if (!isNaN(parsed) && parsed > 1000000000000) return parsed;
   }
-  return Date.now();
+  return null;
 }
 
 /**
- * Returns formatted actual time (e.g. "11:45 PM"), strictly stripping any placeholder "Just now" / "Recent".
+ * Returns formatted actual time (e.g. "9:29 AM"), strictly formatting epoch timestamps to client's local timezone.
  */
 function formatActualTime(rawTime: string | undefined, timestamp?: number): string {
+  const validEpoch = getValidEpoch(timestamp, undefined, rawTime);
+  if (validEpoch && validEpoch >= 1000000000000) {
+    const d = new Date(validEpoch);
+    const hours = d.getHours();
+    const minutes = d.getMinutes();
+    return `${hours % 12 || 12}:${String(minutes).padStart(2, '0')} ${hours >= 12 ? 'PM' : 'AM'}`;
+  }
   if (
     rawTime &&
     rawTime.trim().length > 0 &&
@@ -42,8 +49,7 @@ function formatActualTime(rawTime: string | undefined, timestamp?: number): stri
   ) {
     return rawTime.trim();
   }
-  const validEpoch = getValidEpoch(timestamp);
-  const d = new Date(validEpoch);
+  const d = new Date();
   const hours = d.getHours();
   const minutes = d.getMinutes();
   return `${hours % 12 || 12}:${String(minutes).padStart(2, '0')} ${hours >= 12 ? 'PM' : 'AM'}`;
@@ -53,6 +59,12 @@ function formatActualTime(rawTime: string | undefined, timestamp?: number): stri
  * Returns formatted actual calendar date (e.g. "Sep 27, 2026"), resolving any placeholder "Today" / "Yesterday".
  */
 function formatActualDate(rawDate: string | undefined, timestamp?: number): string {
+  const validEpoch = getValidEpoch(timestamp, rawDate);
+  if (validEpoch && validEpoch >= 1000000000000) {
+    const d = new Date(validEpoch);
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+  }
   if (
     rawDate &&
     rawDate.trim().length > 0 &&
@@ -62,8 +74,7 @@ function formatActualDate(rawDate: string | undefined, timestamp?: number): stri
   ) {
     return rawDate.trim();
   }
-  const validEpoch = getValidEpoch(timestamp, rawDate);
-  const d = new Date(validEpoch);
+  const d = new Date();
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
 }

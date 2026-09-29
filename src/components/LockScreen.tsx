@@ -74,7 +74,9 @@ export const LockScreen: React.FC = () => {
   const pendingTransfersCount = roomTransfers.filter(
     (t) => t.toUsername.toLowerCase() === currentUsernameLower && t.status === 'pending'
   ).length;
-  const activeEmergenciesCount = emergencyAlerts.filter((a) => !a.resolved).length;
+  const activeEmergenciesCount = isAdmin
+    ? emergencyAlerts.filter((a) => !a.resolved).length
+    : 0;
   const unreadAdminNotifsCount = isAdmin
     ? adminNotifications.filter((n) => !n.read).length
     : 0;
@@ -124,12 +126,7 @@ export const LockScreen: React.FC = () => {
       {/* Top Header with Profile Avatar, Greeting, Notifications Trigger & Live Time */}
       <div className="sticky top-0 z-30 flex items-center justify-between px-4 pt-3.5 pb-3.5 border-b border-slate-800/80 bg-[#090d16]/95 backdrop-blur-xl shadow-lg">
         <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setIsProfileModalOpen(true)}
-            className="relative group focus:outline-none cursor-pointer"
-            title="Edit profile icon"
-          >
+          <div className="relative group">
             <img
               src={getAvatarByIndex(currentUser?.avatarIndex !== undefined ? currentUser.avatarIndex : currentUser?.avatarUrl)}
               alt="User Avatar"
@@ -137,10 +134,10 @@ export const LockScreen: React.FC = () => {
                 e.currentTarget.onerror = null;
                 e.currentTarget.src = user_png;
               }}
-              className="w-12 h-12 rounded-full object-contain p-1 bg-slate-900 border-2 border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.35)] transition-transform group-hover:scale-105"
+              className="w-12 h-12 rounded-full object-contain p-1 bg-slate-900 border-2 border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.35)]"
             />
             <span className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-emerald-400 border-2 border-[#0b0f19] shadow-[0_0_8px_#10b981]" />
-          </button>
+          </div>
           <div className="flex flex-col items-start">
             <p className="text-xs font-mono text-slate-400">{greeting}</p>
             <h2 className="text-base sm:text-lg font-bold text-white tracking-wide">{username}</h2>

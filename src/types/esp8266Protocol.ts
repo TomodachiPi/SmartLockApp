@@ -57,6 +57,9 @@ export type ClientMessage =
       username: string;
       userRole?: 'admin' | 'user';
       emergency?: boolean;
+      startingTime?: string;
+      endingTime?: string;
+      date?: string;
       timestamp: number;
     }
   | {
@@ -67,6 +70,13 @@ export type ClientMessage =
       toUsername?: string;
       notes?: string;
       accept?: boolean;
+      relinquishing?: string;
+      gaining?: string;
+      gainRecord?: HistoryRecord;
+      relinqRecord?: HistoryRecord;
+      startingTime?: string;
+      endingTime?: string;
+      date?: string;
       timestamp: number;
     }
   | {
@@ -74,12 +84,16 @@ export type ClientMessage =
       reason: string;
       notes?: string;
       username: string;
+      userRole?: 'admin' | 'user';
+      startingTime?: string;
+      endingTime?: string;
+      date?: string;
       timestamp: number;
     }
   | {
       type: 'DATA_UPDATE_ACTION';
       entity: 'profiles' | 'schedules' | 'labNotes' | 'profileRequests' | 'history' | 'adminNotifications' | 'emergencyAlerts';
-      action: 'create' | 'update' | 'delete' | 'approve' | 'reject' | 'clear' | 'mark_read';
+      action: 'create' | 'update' | 'delete' | 'approve' | 'reject' | 'clear' | 'mark_read' | 'add' | 'add_multiple' | 'seed';
       payload?: any;
       timestamp: number;
     }

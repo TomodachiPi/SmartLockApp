@@ -114,7 +114,7 @@ struct SmartLockHistory {
   String startingTime;
   String endingTime;
   String date;
-  unsigned long timestamp;
+  String timestamp; // Stored as String to prevent 32-bit Arduino int overflow for 13-digit Unix ms
   String notes;
   bool isEmergencyOverride;
   String emergencyReason;
@@ -783,37 +783,37 @@ void removeLabNote(String id) {
 void initDefaultHistory() {
   historyCount = 0;
   // 1 month of realistic sample history exclusively using Administrator and User123test
-  historyList[historyCount++] = { "hist-sep26-4", "Administrator", "Admin Privilege", "admin", false, "3:00 PM", "3:10 PM", "Sep 26, 2026", 1790434800, "Afternoon facility inspection and perimeter check", false, "" };
-  historyList[historyCount++] = { "hist-sep26-3", "User123test", "Standard User Access", "user", true, "1:00 PM", "1:10 PM", "Sep 26, 2026", 1790427600, "Lab session concluded; deadbolt engaged via mobile app", false, "" };
-  historyList[historyCount++] = { "hist-sep26-2", "User123test", "Standard User Access", "user", false, "10:00 AM", "10:05 AM", "Sep 26, 2026", 1790416800, "Gained room custody for Laboratory SmartLock #1 (Transferred from Administrator)", false, "" };
-  historyList[historyCount++] = { "hist-sep26-1", "Administrator", "Admin Privilege", "admin", false, "8:00 AM", "8:30 AM", "Sep 26, 2026", 1790409600, "Morning facility perimeter unlock and system health audit", false, "" };
-  historyList[historyCount++] = { "hist-sep25-4", "Administrator", "Admin Privilege", "admin", true, "5:30 PM", "5:45 PM", "Sep 25, 2026", 1790347800, "Weekend lockdown sweep completed", false, "" };
-  historyList[historyCount++] = { "hist-sep25-3", "User123test", "Standard User Access", "user", true, "1:30 PM", "1:35 PM", "Sep 25, 2026", 1790333400, "Secured primary deadbolt following shift completion", false, "" };
-  historyList[historyCount++] = { "hist-sep25-2", "User123test", "Standard User Access", "user", false, "11:15 AM", "1:30 PM", "Sep 25, 2026", 1790325300, "Research sample cataloging & optics alignment", false, "" };
-  historyList[historyCount++] = { "hist-sep25-1", "Administrator", "Admin Privilege", "admin", false, "7:50 AM", "8:45 AM", "Sep 25, 2026", 1790313000, "Pre-shift facility inspection & ventilation test", false, "" };
-  historyList[historyCount++] = { "hist-sep24-3", "Administrator", "Admin Privilege", "admin", true, "4:15 PM", "4:25 PM", "Sep 24, 2026", 1790256900, "Routine evening lock engagement", false, "" };
-  historyList[historyCount++] = { "hist-sep24-2", "Administrator", "Admin Privilege", "admin", false, "1:00 PM", "1:05 PM", "Sep 24, 2026", 1790245200, "Gained room custody for Laboratory SmartLock #1 (Transferred from User123test)", false, "" };
-  historyList[historyCount++] = { "hist-sep24-1", "User123test", "Standard User Access", "user", false, "10:00 AM", "1:00 PM", "Sep 24, 2026", 1790234400, "Scheduled Thursday lab access: spectroscopy testing", false, "" };
-  historyList[historyCount++] = { "hist-sep23-3", "User123test", "Standard User Access", "user", true, "1:00 PM", "1:10 PM", "Sep 23, 2026", 1790158800, "Door locked securely via WebSocket", false, "" };
-  historyList[historyCount++] = { "hist-sep23-2", "User123test", "Standard User Access", "user", false, "10:30 AM", "1:00 PM", "Sep 23, 2026", 1790149800, "Authorized lab session and equipment check", false, "" };
-  historyList[historyCount++] = { "hist-sep23-1", "Administrator", "Admin Privilege", "admin", false, "8:45 AM", "9:30 AM", "Sep 23, 2026", 1790143500, "Morning facility access via ESP8266 controller", false, "" };
-  historyList[historyCount++] = { "hist-sep22-4", "Administrator", "Admin Privilege", "admin", true, "7:15 PM", "7:25 PM", "Sep 22, 2026", 1790085300, "Door locked after diagnostic", false, "" };
-  historyList[historyCount++] = { "hist-sep22-3", "Administrator", "Admin Privilege", "admin", false, "6:30 PM", "7:15 PM", "Sep 22, 2026", 1790082600, "IoT deadbolt controller firmware verification", false, "" };
-  historyList[historyCount++] = { "hist-sep22-2", "User123test", "Standard User Access", "user", true, "1:00 PM", "1:10 PM", "Sep 22, 2026", 1790062800, "Slot concluded, bolt engaged", false, "" };
-  historyList[historyCount++] = { "hist-sep22-1", "User123test", "Standard User Access", "user", false, "10:00 AM", "1:00 PM", "Sep 22, 2026", 1790052000, "Scheduled Tuesday slot: Laser power meter calibration", false, "" };
-  historyList[historyCount++] = { "hist-sep21-2", "Administrator", "Admin Privilege", "admin", true, "5:45 PM", "6:00 PM", "Sep 21, 2026", 1789993500, "Facility locked for evening", false, "" };
-  historyList[historyCount++] = { "hist-sep21-1", "Administrator", "Admin Privilege", "admin", false, "8:00 AM", "8:45 AM", "Sep 21, 2026", 1789958400, "Weekly Monday opening checks & environmental sensor audit", false, "" };
-  historyList[historyCount++] = { "hist-sep20-2", "Administrator", "Admin Privilege", "admin", true, "11:45 AM", "11:55 AM", "Sep 20, 2026", 1789885500, "Weekend re-arm smartbolt lock sequence", false, "" };
-  historyList[historyCount++] = { "hist-sep20-1", "Administrator", "Admin Privilege", "admin", false, "11:00 AM", "11:45 AM", "Sep 20, 2026", 1789882800, "Weekend automated sensor health verification", false, "" };
-  historyList[historyCount++] = { "hist-sep19-2", "User123test", "Standard User Access", "user", true, "12:00 PM", "12:10 PM", "Sep 19, 2026", 1789800000, "Secured upon leaving research lab", false, "" };
-  historyList[historyCount++] = { "hist-sep19-1", "User123test", "Standard User Access", "user", false, "9:30 AM", "12:00 PM", "Sep 19, 2026", 1789791000, "Weekend research session: Laser beam alignment", false, "" };
-  historyList[historyCount++] = { "hist-sep18-3", "Administrator", "Admin Privilege", "admin", true, "5:30 PM", "5:45 PM", "Sep 18, 2026", 1789733400, "Secured smartlock for weekend", false, "" };
-  historyList[historyCount++] = { "hist-sep18-2", "User123test", "Standard User Access", "user", false, "1:30 PM", "4:00 PM", "Sep 18, 2026", 1789719000, "Microfluidics assay setup and sensor check", false, "" };
-  historyList[historyCount++] = { "hist-sep18-1", "Administrator", "Admin Privilege", "admin", false, "8:10 AM", "8:55 AM", "Sep 18, 2026", 1789699800, "Morning shift safety and power audit", false, "" };
-  historyList[historyCount++] = { "hist-sep17-2", "User123test", "Standard User Access", "user", true, "1:00 PM", "1:10 PM", "Sep 17, 2026", 1789630800, "Door locked following schedule completion", false, "" };
-  historyList[historyCount++] = { "hist-sep17-1", "User123test", "Standard User Access", "user", false, "10:00 AM", "1:00 PM", "Sep 17, 2026", 1789620000, "Scheduled Thursday lab shift", false, "" };
-  historyList[historyCount++] = { "hist-sep16-2", "Administrator", "Admin Privilege", "admin", true, "9:30 AM", "9:40 AM", "Sep 16, 2026", 1789531800, "Drill ended; door re-secured under normal protocol", false, "" };
-  historyList[historyCount++] = { "hist-sep16-1", "Administrator", "Admin Privilege", "admin", false, "9:15 AM", "9:25 AM", "Sep 16, 2026", 1789530900, "EMERGENCY OVERRIDE UNLOCKED: Fire drill & emergency egress test", true, "Fire drill & emergency egress test" };
+  historyList[historyCount++] = { "hist-sep26-4", "Administrator", "Admin Privilege", "admin", false, "3:00 PM", "3:10 PM", "Sep 26, 2026", "1790434800000", "Afternoon facility inspection and perimeter check", false, "" };
+  historyList[historyCount++] = { "hist-sep26-3", "User123test", "Standard User Access", "user", true, "1:00 PM", "1:10 PM", "Sep 26, 2026", "1790427600000", "Lab session concluded; deadbolt engaged via mobile app", false, "" };
+  historyList[historyCount++] = { "hist-sep26-2", "User123test", "Standard User Access", "user", false, "10:00 AM", "10:05 AM", "Sep 26, 2026", "1790416800000", "Gained room custody for Laboratory SmartLock #1 (Transferred from Administrator)", false, "" };
+  historyList[historyCount++] = { "hist-sep26-1", "Administrator", "Admin Privilege", "admin", false, "8:00 AM", "8:30 AM", "Sep 26, 2026", "1790409600000", "Morning facility perimeter unlock and system health audit", false, "" };
+  historyList[historyCount++] = { "hist-sep25-4", "Administrator", "Admin Privilege", "admin", true, "5:30 PM", "5:45 PM", "Sep 25, 2026", "1790347800000", "Weekend lockdown sweep completed", false, "" };
+  historyList[historyCount++] = { "hist-sep25-3", "User123test", "Standard User Access", "user", true, "1:30 PM", "1:35 PM", "Sep 25, 2026", "1790333400000", "Secured primary deadbolt following shift completion", false, "" };
+  historyList[historyCount++] = { "hist-sep25-2", "User123test", "Standard User Access", "user", false, "11:15 AM", "1:30 PM", "Sep 25, 2026", "1790325300000", "Research sample cataloging & optics alignment", false, "" };
+  historyList[historyCount++] = { "hist-sep25-1", "Administrator", "Admin Privilege", "admin", false, "7:50 AM", "8:45 AM", "Sep 25, 2026", "1790313000000", "Pre-shift facility inspection & ventilation test", false, "" };
+  historyList[historyCount++] = { "hist-sep24-3", "Administrator", "Admin Privilege", "admin", true, "4:15 PM", "4:25 PM", "Sep 24, 2026", "1790256900000", "Routine evening lock engagement", false, "" };
+  historyList[historyCount++] = { "hist-sep24-2", "Administrator", "Admin Privilege", "admin", false, "1:00 PM", "1:05 PM", "Sep 24, 2026", "1790245200000", "Gained room custody for Laboratory SmartLock #1 (Transferred from User123test)", false, "" };
+  historyList[historyCount++] = { "hist-sep24-1", "User123test", "Standard User Access", "user", false, "10:00 AM", "1:00 PM", "Sep 24, 2026", "1790234400000", "Scheduled Thursday lab access: spectroscopy testing", false, "" };
+  historyList[historyCount++] = { "hist-sep23-3", "User123test", "Standard User Access", "user", true, "1:00 PM", "1:10 PM", "Sep 23, 2026", "1790158800000", "Door locked securely via WebSocket", false, "" };
+  historyList[historyCount++] = { "hist-sep23-2", "User123test", "Standard User Access", "user", false, "10:30 AM", "1:00 PM", "Sep 23, 2026", "1790149800000", "Authorized lab session and equipment check", false, "" };
+  historyList[historyCount++] = { "hist-sep23-1", "Administrator", "Admin Privilege", "admin", false, "8:45 AM", "9:30 AM", "Sep 23, 2026", "1790143500000", "Morning facility access via ESP8266 controller", false, "" };
+  historyList[historyCount++] = { "hist-sep22-4", "Administrator", "Admin Privilege", "admin", true, "7:15 PM", "7:25 PM", "Sep 22, 2026", "1790085300000", "Door locked after diagnostic", false, "" };
+  historyList[historyCount++] = { "hist-sep22-3", "Administrator", "Admin Privilege", "admin", false, "6:30 PM", "7:15 PM", "Sep 22, 2026", "1790082600000", "IoT deadbolt controller firmware verification", false, "" };
+  historyList[historyCount++] = { "hist-sep22-2", "User123test", "Standard User Access", "user", true, "1:00 PM", "1:10 PM", "Sep 22, 2026", "1790062800000", "Slot concluded, bolt engaged", false, "" };
+  historyList[historyCount++] = { "hist-sep22-1", "User123test", "Standard User Access", "user", false, "10:00 AM", "1:00 PM", "Sep 22, 2026", "1790052000000", "Scheduled Tuesday slot: Laser power meter calibration", false, "" };
+  historyList[historyCount++] = { "hist-sep21-2", "Administrator", "Admin Privilege", "admin", true, "5:45 PM", "6:00 PM", "Sep 21, 2026", "1789993500000", "Facility locked for evening", false, "" };
+  historyList[historyCount++] = { "hist-sep21-1", "Administrator", "Admin Privilege", "admin", false, "8:00 AM", "8:45 AM", "Sep 21, 2026", "1789958400000", "Weekly Monday opening checks & environmental sensor audit", false, "" };
+  historyList[historyCount++] = { "hist-sep20-2", "Administrator", "Admin Privilege", "admin", true, "11:45 AM", "11:55 AM", "Sep 20, 2026", "1789885500000", "Weekend re-arm smartbolt lock sequence", false, "" };
+  historyList[historyCount++] = { "hist-sep20-1", "Administrator", "Admin Privilege", "admin", false, "11:00 AM", "11:45 AM", "Sep 20, 2026", "1789882800000", "Weekend automated sensor health verification", false, "" };
+  historyList[historyCount++] = { "hist-sep19-2", "User123test", "Standard User Access", "user", true, "12:00 PM", "12:10 PM", "Sep 19, 2026", "1789800000000", "Secured upon leaving research lab", false, "" };
+  historyList[historyCount++] = { "hist-sep19-1", "User123test", "Standard User Access", "user", false, "9:30 AM", "12:00 PM", "Sep 19, 2026", "1789791000000", "Weekend research session: Laser beam alignment", false, "" };
+  historyList[historyCount++] = { "hist-sep18-3", "Administrator", "Admin Privilege", "admin", true, "5:30 PM", "5:45 PM", "Sep 18, 2026", "1789733400000", "Secured smartlock for weekend", false, "" };
+  historyList[historyCount++] = { "hist-sep18-2", "User123test", "Standard User Access", "user", false, "1:30 PM", "4:00 PM", "Sep 18, 2026", "1789719000000", "Microfluidics assay setup and sensor check", false, "" };
+  historyList[historyCount++] = { "hist-sep18-1", "Administrator", "Admin Privilege", "admin", false, "8:10 AM", "8:55 AM", "Sep 18, 2026", "1789699800000", "Morning shift safety and power audit", false, "" };
+  historyList[historyCount++] = { "hist-sep17-2", "User123test", "Standard User Access", "user", true, "1:00 PM", "1:10 PM", "Sep 17, 2026", "1789630800000", "Door locked following schedule completion", false, "" };
+  historyList[historyCount++] = { "hist-sep17-1", "User123test", "Standard User Access", "user", false, "10:00 AM", "1:00 PM", "Sep 17, 2026", "1789620000000", "Scheduled Thursday lab shift", false, "" };
+  historyList[historyCount++] = { "hist-sep16-2", "Administrator", "Admin Privilege", "admin", true, "9:30 AM", "9:40 AM", "Sep 16, 2026", "1789531800000", "Drill ended; door re-secured under normal protocol", false, "" };
+  historyList[historyCount++] = { "hist-sep16-1", "Administrator", "Admin Privilege", "admin", false, "9:15 AM", "9:25 AM", "Sep 16, 2026", "1789530900000", "EMERGENCY OVERRIDE UNLOCKED: Fire drill & emergency egress test", true, "Fire drill & emergency egress test" };
 }
 
 // -------------------------------------------------------------
@@ -831,7 +831,7 @@ void saveHistoryToFS() {
                 historyList[i].startingTime + "\t" +
                 historyList[i].endingTime + "\t" +
                 historyList[i].date + "\t" +
-                String(historyList[i].timestamp) + "\t" +
+                historyList[i].timestamp + "\t" +
                 historyList[i].notes + "\t" +
                 (historyList[i].isEmergencyOverride ? "1" : "0") + "\t" +
                 historyList[i].emergencyReason);
@@ -877,7 +877,7 @@ void loadHistoryFromFS() {
       String st = line.substring(p[4] + 1, p[5]);
       String et = line.substring(p[5] + 1, p[6]);
       String dt = line.substring(p[6] + 1, p[7]);
-      unsigned long ts = line.substring(p[7] + 1, p[8]).toInt();
+      String ts = line.substring(p[7] + 1, p[8]);
       String nt = line.substring(p[8] + 1, p[9]);
       bool emg = (line.substring(p[9] + 1, p[10]) == "1");
       String emgR = line.substring(p[10] + 1);
@@ -897,7 +897,7 @@ void loadHistoryFromFS() {
   }
 }
 
-void addHistoryRecord(String username, String userType, String permission, bool locked, String notes, bool isEmergency = false, String emergencyReason = "", String timeStr = "", String dateStr = "", unsigned long epochTimestamp = 0) {
+void addHistoryRecord(String username, String userType, String permission, bool locked, String notes, bool isEmergency = false, String emergencyReason = "", String timeStr = "", String dateStr = "", String timestampStr = "", String customId = "") {
   if (historyCount < MAX_HISTORY) {
     historyCount++;
   }
@@ -905,17 +905,25 @@ void addHistoryRecord(String username, String userType, String permission, bool 
     historyList[i] = historyList[i - 1];
   }
 
-  String id = "hist-esp-" + String(millis()) + "-" + String(random(100, 999));
+  String id = (customId.length() > 0) ? customId : ("hist-esp-" + String(millis()) + "-" + String(random(100, 999)));
+  String finalTs = timestampStr;
+  if (finalTs.length() == 0 || finalTs == "0") {
+    finalTs = String(millis());
+  }
+
+  String sTime = timeStr.length() > 0 ? timeStr : "Just now";
+  String sDate = dateStr.length() > 0 ? dateStr : "Today";
+
   historyList[0] = {
     id,
     username.length() > 0 ? username : "Administrator",
     permission.length() > 0 ? permission : (userType == "admin" ? "Admin Privilege" : "Standard User Access"),
     userType.length() > 0 ? userType : "user",
     locked,
-    timeStr.length() > 0 ? timeStr : "12:00 PM",
-    timeStr.length() > 0 ? timeStr : "12:00 PM",
-    dateStr.length() > 0 ? dateStr : "Sep 27, 2026",
-    epochTimestamp > 1000000000 ? epochTimestamp : 0,
+    sTime,
+    sTime,
+    sDate,
+    finalTs,
     notes,
     isEmergency,
     emergencyReason
@@ -1150,13 +1158,16 @@ String buildProgressJson() {
 // -------------------------------------------------------------
 // Lock Hardware Transition
 // -------------------------------------------------------------
-void triggerLockToggle(String user = "Administrator") {
+void triggerLockToggle(String user = "Administrator", String role = "user", String timeStr = "", String dateStr = "", String timestampStr = "") {
   unsigned long timeElapsed = millis();
   if (timeElapsed - lastPressTime < pressDelay) return;
   if (changing) return;
 
   lastPressTime = timeElapsed;
   lastActingUser = user;
+
+  String actingRole = (user.equalsIgnoreCase("Administrator") ? "admin" : (role.length() > 0 ? role : "user"));
+  String actingPerm = (actingRole == "admin" ? "Admin Privilege" : "Standard User Access");
 
   if (isLocked) {
     // Currently LOCKED -> Begin UNLOCKING
@@ -1178,6 +1189,9 @@ void triggerLockToggle(String user = "Administrator") {
     lcd.print("LOCK STATUS:    ");
     lcd.setCursor(0, 1);
     lcd.print("UNLOCKING...    ");
+
+    // Immediately record unlock event in access log so all connected devices see it in real-time
+    addHistoryRecord(user, actingRole, actingPerm, false, "Door opened with authorized credential via WebSocket", false, "", timeStr, dateStr, timestampStr);
   } else {
     // Currently UNLOCKED -> Begin LOCKING
     changing = true;
@@ -1198,6 +1212,9 @@ void triggerLockToggle(String user = "Administrator") {
     lcd.print("LOCK STATUS:    ");
     lcd.setCursor(0, 1);
     lcd.print("LOCKING...      ");
+
+    // Immediately record lock event in access log
+    addHistoryRecord(user, actingRole, actingPerm, true, "Door locked securely via WebSocket", false, "", timeStr, dateStr, timestampStr);
   }
 
   // Broadcast initial progress and countdown to all connected apps
@@ -1238,6 +1255,12 @@ void handleRoomTransfer(String msg) {
       pendingStatus = "accepted";
       String relinquishing = extractJsonString(msg, "relinquishing");
       String gaining = extractJsonString(msg, "gaining");
+      String timeStr = extractJsonString(msg, "startingTime");
+      if (timeStr.length() == 0) timeStr = extractJsonString(msg, "timeStr");
+      String dateStr = extractJsonString(msg, "date");
+      if (dateStr.length() == 0) dateStr = extractJsonString(msg, "dateStr");
+      String ts = extractJsonString(msg, "timestamp");
+
       if (relinquishing.length() == 0) {
         relinquishing = (pendingType == "request" ? pendingToUser : pendingFromUser);
       }
@@ -1256,8 +1279,8 @@ void handleRoomTransfer(String msg) {
       String relinqRole = (relinquishing.equalsIgnoreCase("Administrator") ? "admin" : "user");
       String relinqPerm = (relinquishing.equalsIgnoreCase("Administrator") ? "Admin Privilege" : "Standard User Access");
 
-      addHistoryRecord(relinquishing, relinqRole, relinqPerm, false, "Relinquished room custody for Laboratory SmartLock #1 (Transferred to " + gaining + ")");
-      addHistoryRecord(gaining, gainRole, gainPerm, false, "Gained room custody for Laboratory SmartLock #1 (Transferred from " + relinquishing + ")");
+      addHistoryRecord(relinquishing, relinqRole, relinqPerm, false, "Relinquished room custody for Laboratory SmartLock #1 (Transferred to " + gaining + ")", false, "", timeStr, dateStr, ts);
+      addHistoryRecord(gaining, gainRole, gainPerm, false, "Gained room custody for Laboratory SmartLock #1 (Transferred from " + relinquishing + ")", false, "", timeStr, dateStr, ts);
 
       lcd.setCursor(0, 0);
       lcd.print("ACCESS GRANTED: ");
@@ -1282,21 +1305,43 @@ void handleRoomTransfer(String msg) {
 void handleEmergency(String msg) {
   String user = extractJsonString(msg, "username");
   String reason = extractJsonString(msg, "reason");
+  String notes = extractJsonString(msg, "notes");
+  String timeStr = extractJsonString(msg, "startingTime");
+  if (timeStr.length() == 0) timeStr = extractJsonString(msg, "timeStr");
+  String dateStr = extractJsonString(msg, "date");
+  if (dateStr.length() == 0) dateStr = extractJsonString(msg, "dateStr");
+  String ts = extractJsonString(msg, "timestamp");
+
   if (reason.length() == 0) reason = "Emergency Evacuation";
+  if (user.length() == 0) user = "EMERGENCY";
 
   lcd.setCursor(0, 0);
   lcd.print("EMERGENCY ALERT!");
   lcd.setCursor(0, 1);
   lcd.print("OVERRIDE UNLOCK ");
 
-  activeRoomHolder = (user.length() > 0 ? user : "EMERGENCY");
+  activeRoomHolder = user;
   
-  // Record emergency override event in access log
-  addHistoryRecord(activeRoomHolder, "user", "EMERGENCY OVERRIDE", false, "EMERGENCY OVERRIDE UNLOCKED: " + reason, true, reason);
+  String fullNotes = "EMERGENCY OVERRIDE UNLOCKED: " + reason;
+  if (notes.length() > 0) fullNotes += " - " + notes;
+
+  // Record emergency override event in access log immediately
+  addHistoryRecord(user, "user", "EMERGENCY OVERRIDE", false, fullNotes, true, reason, timeStr, dateStr, ts);
 
   if (isLocked) {
     // If currently locked, unlock immediately
-    triggerLockToggle(activeRoomHolder);
+    changing = true;
+    lockOperation = "unlocking";
+    isLocked = false;
+    remainingTime = closingCount;
+    totalDuration = closingCount;
+    lockCounter = 0;
+    lockProgress = 0;
+
+    digitalWrite(FORWARD_OUTPUT, HIGH);
+    digitalWrite(BACKWARD_OUTPUT, LOW);
+    digitalWrite(LIMIT_OUTPUT, HIGH);
+    digitalWrite(LED_BUILTIN, HIGH);
   }
 }
 
@@ -1368,7 +1413,14 @@ void onEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventTyp
         if (msg == "toggle" || msg.indexOf("\"type\":\"LOCK_ACTION\"") >= 0 || msg.indexOf("\"action\":\"toggle\"") >= 0) {
           String username = extractJsonString(msg, "username");
           if (username.length() == 0) username = "User";
-          triggerLockToggle(username);
+          String userRole = extractJsonString(msg, "userRole");
+          String timeStr = extractJsonString(msg, "startingTime");
+          if (timeStr.length() == 0) timeStr = extractJsonString(msg, "timeStr");
+          String dateStr = extractJsonString(msg, "date");
+          if (dateStr.length() == 0) dateStr = extractJsonString(msg, "dateStr");
+          String ts = extractJsonString(msg, "timestamp");
+
+          triggerLockToggle(username, userRole, timeStr, dateStr, ts);
           return;
         }
 
@@ -1386,7 +1438,7 @@ void onEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventTyp
           return;
         }
 
-        // 6. Data Update action (users, requests, schedules, approvals)
+        // 6. Data Update action (users, requests, schedules, approvals, history)
         if (msg.indexOf("\"type\":\"DATA_UPDATE_ACTION\"") >= 0) {
           String entity = extractJsonString(msg, "entity");
           String action = extractJsonString(msg, "action");
@@ -1530,6 +1582,7 @@ void onEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventTyp
               initDefaultHistory();
               saveHistoryToFS();
             } else if (action == "add" || action == "create") {
+              String hId = extractPayloadString(msg, "id");
               String hUser = extractPayloadString(msg, "username");
               String hRole = extractPayloadString(msg, "userType");
               if (hRole.length() == 0) hRole = extractPayloadString(msg, "role");
@@ -1542,13 +1595,19 @@ void onEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventTyp
               String hEmgStr = extractPayloadString(msg, "isEmergencyOverride");
               bool hEmg = (hEmgStr == "true" || hEmgStr == "1");
               String hEmgR = extractPayloadString(msg, "emergencyReason");
+              String hTime = extractPayloadString(msg, "startingTime");
+              if (hTime.length() == 0) hTime = extractPayloadString(msg, "timeStr");
+              String hDate = extractPayloadString(msg, "date");
+              if (hDate.length() == 0) hDate = extractPayloadString(msg, "dateStr");
+              String hTs = extractPayloadString(msg, "timestamp");
+
               if (hUser.length() > 0) {
-                addHistoryRecord(hUser, hRole, hPerm, hLocked, hNotes, hEmg, hEmgR);
+                addHistoryRecord(hUser, hRole, hPerm, hLocked, hNotes, hEmg, hEmgR, hTime, hDate, hTs, hId);
               }
             }
           }
 
-          // Broadcast updated state & users & schedules & requests to all devices
+          // Broadcast updated state & users & schedules & requests & history to all devices immediately
           ws.textAll(buildSyncJson());
           return;
         }
@@ -1674,11 +1733,6 @@ void loop() {
           }
           saveStateToFS();
 
-          // Record unlock event in access log
-          String actingRole = (activeRoomHolder.equalsIgnoreCase("Administrator") ? "admin" : "user");
-          String actingPerm = (activeRoomHolder.equalsIgnoreCase("Administrator") ? "Admin Privilege" : "Standard User Access");
-          addHistoryRecord(activeRoomHolder, actingRole, actingPerm, false, "Door opened with authorized credential via ESP8266 controller");
-
           lcd.setCursor(0, 0);
           lcd.print("LOCK STATUS:    ");
           lcd.setCursor(0, 1);
@@ -1714,11 +1768,6 @@ void loop() {
           digitalWrite(LIMIT_OUTPUT, LOW);
 
           // Invalidate room holder and pending transfers upon locking
-          String lockedByUser = (lastActingUser.length() > 0 ? lastActingUser : "Administrator");
-          String lockingRole = (lockedByUser.equalsIgnoreCase("Administrator") ? "admin" : "user");
-          String lockingPerm = (lockedByUser.equalsIgnoreCase("Administrator") ? "Admin Privilege" : "Standard User Access");
-          addHistoryRecord(lockedByUser, lockingRole, lockingPerm, true, "Door locked securely via ESP8266 controller");
-
           activeRoomHolder = "";
           pendingTransferId = "";
           saveStateToFS();

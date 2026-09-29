@@ -59,20 +59,23 @@ export const NotificationsCenterModal: React.FC<NotificationsCenterModalProps> =
   );
   const pendingTransfers = relevantTransfers.filter((t) => t.status === 'pending');
 
-  // 2. Filter emergencies
-  const activeEmergencies = emergencyAlerts.filter((a) => !a.resolved);
+  // 2. Filter emergencies (admin only)
+  const activeEmergencies = isAdmin
+    ? emergencyAlerts.filter((a) => !a.resolved)
+    : [];
 
-  // 3. Admin lock events
-  const unreadAdminNotifs = adminNotifications.filter((n) => !n.read);
+  // 3. Admin lock events (admin only)
+  const unreadAdminNotifs = isAdmin
+    ? adminNotifications.filter((n) => !n.read)
+    : [];
   const relevantAdminNotifs = isAdmin ? adminNotifications : [];
 
-  // 4. Profile approvals
+  // 4. Profile approvals (admin only)
   const pendingApprovals = isAdmin ? profileRequests : [];
 
   const totalCount =
     pendingTransfers.length +
-    activeEmergencies.length +
-    (isAdmin ? unreadAdminNotifs.length + pendingApprovals.length : 0);
+    (isAdmin ? activeEmergencies.length + unreadAdminNotifs.length + pendingApprovals.length : 0);
 
   const handleAcceptTransfer = (transferId: string, isAccessRequest: boolean, otherUser: string) => {
     respondToRoomTransfer(transferId, true);
@@ -131,7 +134,7 @@ export const NotificationsCenterModal: React.FC<NotificationsCenterModalProps> =
                 )}
               </div>
               <p className="text-xs sm:text-sm text-slate-400 font-mono">
-                Room custody, overrides & activity
+                {isAdmin ? 'Room custody, overrides & activity' : 'Room custody handovers'}
               </p>
             </div>
           </div>
@@ -201,23 +204,25 @@ export const NotificationsCenterModal: React.FC<NotificationsCenterModalProps> =
             )}
           </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveTabFilter('emergencies')}
-            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer shrink-0 flex items-center gap-2 font-bold min-h-[40px] ${
-              activeTab === 'emergencies'
-                ? 'bg-red-500/30 text-red-200 border-2 border-red-400 font-extrabold shadow-sm'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800/60 border border-transparent'
-            }`}
-          >
-            <ShieldAlert className="w-4 h-4 text-red-400" />
-            <span>Emergencies</span>
-            {activeEmergencies.length > 0 && (
-              <span className="w-5 h-5 rounded-full bg-red-500 text-white font-black text-xs flex items-center justify-center">
-                {activeEmergencies.length}
-              </span>
-            )}
-          </button>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => setActiveTabFilter('emergencies')}
+              className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer shrink-0 flex items-center gap-2 font-bold min-h-[40px] ${
+                activeTab === 'emergencies'
+                  ? 'bg-red-500/30 text-red-200 border-2 border-red-400 font-extrabold shadow-sm'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800/60 border border-transparent'
+              }`}
+            >
+              <ShieldAlert className="w-4 h-4 text-red-400" />
+              <span>Emergencies</span>
+              {activeEmergencies.length > 0 && (
+                <span className="w-5 h-5 rounded-full bg-red-500 text-white font-black text-xs flex items-center justify-center">
+                  {activeEmergencies.length}
+                </span>
+              )}
+            </button>
+          )}
 
           {isAdmin && (
             <button
@@ -422,7 +427,7 @@ export const NotificationsCenterModal: React.FC<NotificationsCenterModalProps> =
             </>
           )}
 
-          {(activeTab === 'all' || activeTab === 'emergencies') && (
+          {isAdmin && (activeTab === 'all' || activeTab === 'emergencies') && (
             <>
               {emergencyAlerts.length > 0 && (
                 <div className="space-y-3">
@@ -662,7 +667,9 @@ export const NotificationsCenterModal: React.FC<NotificationsCenterModalProps> =
               </div>
               <h4 className="text-base sm:text-lg font-bold text-white">No active notifications</h4>
               <p className="text-xs sm:text-sm text-slate-400 max-w-xs mx-auto leading-relaxed">
-                You're all caught up! New room handovers, emergency alarms, and lock alerts will appear here.
+                {isAdmin
+                  ? "You're all caught up! New room handovers, emergency alarms, and lock alerts will appear here."
+                  : "You're all caught up! New room custody handovers will appear here."}
               </p>
             </div>
           )}

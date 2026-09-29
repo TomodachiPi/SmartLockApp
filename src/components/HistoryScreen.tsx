@@ -142,7 +142,7 @@ export const HistoryScreen: React.FC = () => {
         {isAdmin && showCharts && (
           <>
             <AnalyticsCharts records={relevantHistory} />
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+            <div className="grid grid-cols-2 grid-rows-3 gap-2">
               <div className="bg-[#111827] p-2.5 sm:p-3 rounded-2xl border border-slate-800 text-center">
                 <p className="text-[11px] sm:text-xs font-mono text-slate-400 uppercase tracking-wider font-semibold">Locks</p>
                 <p className="text-base sm:text-lg md:text-xl font-black font-mono text-red-400 mt-0.5">
@@ -167,7 +167,7 @@ export const HistoryScreen: React.FC = () => {
                   {relevantHistory.filter((h) => !!h.isEmergencyOverride).length}
                 </p>
               </div>
-              <div className="bg-[#111827] p-2.5 sm:p-3 rounded-2xl border border-slate-800 text-center col-span-2 sm:col-span-1">
+              <div className="bg-[#111827] p-2.5 sm:p-3 rounded-2xl border border-slate-800 text-center col-span-2 sm:col-span-2">
                 <p className="text-[11px] sm:text-xs font-mono text-slate-400 uppercase tracking-wider font-semibold">Total</p>
                 <p className="text-base sm:text-lg md:text-xl font-black font-mono text-white mt-0.5">{relevantHistory.length}</p>
               </div>

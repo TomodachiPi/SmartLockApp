@@ -102,12 +102,9 @@ export const AccessCard: React.FC<AccessCardProps> = ({
               <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
             )}
             <span className="tracking-wide">
-              {isCurrentlyAuthorized ? 'IN ACTIVE WINDOW' : 'OUTSIDE PERMITTED WINDOW'}
+              {isCurrentlyAuthorized ? 'INSIDE SCHEDULE WINDOW' : 'OUTSIDE SCHEDULE WINDOW'}
             </span>
           </div>
-          <span className="text-[11px] font-normal text-slate-300 hidden sm:inline">
-            {isCurrentlyAuthorized ? 'Authorized to Lock/Unlock' : 'Lock Operations Blocked'}
-          </span>
         </div>
       </div>
 

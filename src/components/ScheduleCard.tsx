@@ -149,18 +149,10 @@ export const ScheduleCard: React.FC<ScheduleCardProps> = ({
               {isRestricted
                 ? 'ACCESS RESTRICTED'
                 : isCurrentlyInWindow
-                ? 'IN ACTIVE WINDOW'
-                : 'OUTSIDE WINDOW'}
+                ? 'INSIDE SCHEDULE WINDOW'
+                : 'OUTSIDE SCHEDULE WINDOW'}
             </span>
           </div>
-
-          <span className="text-[11px] font-normal text-slate-400 hidden sm:inline">
-            {isRestricted
-              ? 'Lock access disabled'
-              : isCurrentlyInWindow
-              ? 'Currently authorized to operate lock'
-              : 'Currently outside scheduled window'}
-          </span>
         </div>
       </div>
 

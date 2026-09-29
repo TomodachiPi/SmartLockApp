@@ -423,8 +423,18 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ records: propR
               <Legend
                 verticalAlign="bottom"
                 align="center"
+                layout="horizontal"
                 iconType="circle"
-                wrapperStyle={{ paddingTop: '8px', fontSize: '11px' }}
+                wrapperStyle={{ 
+                  display: 'flex', 
+                  flexWrap: 'wrap', 
+                  justifyContent: 'center',
+                  width: '80%',
+                  margin: '0 20%',
+                  gap: '10px 0px',
+                  paddingTop: '8px', 
+                  fontSize: '11px' 
+                }}
                 formatter={(value: string) => {
                   let total = 0;
                   if (value === 'Entries (Unlocks)') {
